@@ -1,10 +1,17 @@
 // utils/emailHelper.js
 const nodemailer = require('nodemailer');
+const dns = require('dns');
+
+// --- THE RENDER NETWORK FIX ---
+// Force Node.js to use IPv4 instead of IPv6 to prevent ENETUNREACH errors on free cloud tiers
+dns.setDefaultResultOrder('ipv4first');
 
 // Configure the email transmission engine
-// Note: For production, you should put these credentials in a .env file!
+// Note: For production, credentials are safely stored in Render Environment Variables
 const transporter = nodemailer.createTransport({
-  service: 'gmail', // You can use SendGrid, AWS SES, Mailgun, etc.
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true, // Use SSL
   auth: {
     user: process.env.GMAIL_USER,
     pass: process.env.GMAIL_PASS
