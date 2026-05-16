@@ -1,6 +1,7 @@
 // routes/profile.js
 const express = require('express');
 const { sendNotification } = require('../utils/notificationHelper');
+const { trackEvent } = require('../utils/analyticsHelper'); // NEW: Import the silent tracker
 const multer = require('multer');
 const { User, Insight } = require('../models/CoreSchemas');
 const authMiddleware = require('../middleware/authMiddleware');
@@ -29,14 +30,14 @@ router.put('/', authMiddleware, upload.fields([
     { name: 'profileBanner', maxCount: 1 }
 ]), async (req, res) => {
   try {
-    const { name, username, headline, industry, bio, location, linkedIn, github, website, skills } = req.body; // Added industry
+    const { name, username, headline, industry, bio, location, linkedIn, github, website, skills } = req.body;
     
     const user = await User.findById(req.user.userId);
     if (!user) return res.status(404).json({ message: 'User not found.' });
 
     if (name) user.name = name;
     if (headline) user.headline = headline;
-    if (industry) user.industry = industry; // Added this!
+    if (industry) user.industry = industry; 
     if (bio) user.bio = bio;
     if (location) user.location = location;
 
@@ -70,7 +71,6 @@ router.put('/', authMiddleware, upload.fields([
 // --- ROUTE 2: ADD A CASE STUDY (PORTFOLIO) ---
 router.post('/portfolio', authMiddleware, upload.single('projectImage'), async (req, res) => {
   try {
-    // NEW: Added stack and metrics
     const { title, challenge, solution, result, projectUrl, githubUrl, stack } = req.body;
     
     if (!title || !solution) {
@@ -83,8 +83,6 @@ router.post('/portfolio', authMiddleware, upload.single('projectImage'), async (
 
     user.portfolio.push({
       title, challenge, solution, result, projectUrl, githubUrl, imageUrl: imagePath,
-      // Temporarily piggybacking stack on 'challenge' if schema isn't updated yet, 
-      // but assuming we add it to the string or schema later. For now, format it:
       challenge: stack ? `Stack: ${stack} | ${challenge}` : challenge
     });
 
@@ -114,13 +112,58 @@ router.post('/:userId/testimonial', authMiddleware, async (req, res) => {
         recipient: targetUserId, sender: senderId, type: 'Testimonial',
         message: `Someone just left a new professional endorsement on your profile!`, targetId: user._id
       });
+
+      // --- SILENT ANALYTICS ---
+      trackEvent({ actor: senderId, targetUser: targetUserId, eventType: 'REVIEW_RECEIVED' });
+
       res.status(201).json({ message: 'Endorsement added!', testimonials: user.testimonials });
     } catch (error) {
       res.status(500).json({ message: 'Server error adding endorsement.' });
     }
 });
 
-// --- ROUTE 4: VIEW ADVANCED PROFILE & CALCULATE REPUTATION (PHASE 2 ROADMAP) ---
+// --- ROUTE 4: LEAVE A TRADE REVIEW (RESTORED!) ---
+router.post('/:userId/review', authMiddleware, async (req, res) => {
+  try {
+    const { workspaceId, rating, text } = req.body;
+    const targetUserId = req.params.userId;
+    const senderId = req.user.userId;
+
+    if (targetUserId === senderId) return res.status(400).json({ message: 'You cannot review yourself.' });
+
+    const user = await User.findById(targetUserId);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    const alreadyReviewed = user.barterReviews?.some(r => r.workspace.toString() === workspaceId && r.reviewer.toString() === senderId);
+    if (alreadyReviewed) return res.status(400).json({ message: 'You have already reviewed this user for this specific trade.' });
+
+    user.barterReviews.push({
+      reviewer: senderId,
+      workspace: workspaceId,
+      rating: Number(rating),
+      text
+    });
+
+    await user.save();
+
+    await sendNotification({
+      recipient: targetUserId,
+      sender: senderId,
+      type: 'NewReview',
+      message: `You received a ${rating}-star review for a completed trade!`,
+      targetId: user._id
+    });
+
+    // --- SILENT ANALYTICS ---
+    trackEvent({ actor: senderId, targetUser: targetUserId, eventType: 'REVIEW_RECEIVED' });
+
+    res.status(201).json({ message: 'Review submitted!', reviews: user.barterReviews });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error submitting review.' });
+  }
+});
+
+// --- ROUTE 5: VIEW ADVANCED PROFILE & CALCULATE REPUTATION ---
 router.get('/:userId', authMiddleware, async (req, res) => {
   try {
     const targetUserId = req.params.userId;
@@ -131,10 +174,17 @@ router.get('/:userId', authMiddleware, async (req, res) => {
 
     if (!userProfile) return res.status(404).json({ message: 'Profile not found.' });
 
-    // PHASE 1 FIX: Added Pagination/Limits to prevent database throttling
+    // --- SILENT ANALYTICS ---
+    trackEvent({
+      actor: req.user.userId,
+      targetUser: targetUserId,
+      eventType: 'PROFILE_VIEW'
+    });
+
+    // Added Pagination/Limits to prevent database throttling
     const recentInsights = await Insight.find({ author: targetUserId }).sort({ createdAt: -1 }).limit(10);
 
-    // --- NEW: THE REPUTATION ENGINE ALGORITHM ---
+    // --- THE REPUTATION ENGINE ALGORITHM ---
     let repScore = 50; // Baseline score
     let autoBadges = [];
 
@@ -170,7 +220,7 @@ router.get('/:userId', authMiddleware, async (req, res) => {
         thoughtLeadershipFeed: recentInsights,
         reputation: {
           score: repScore,
-          badges: [...new Set([...(userProfile.trustBadges || []), ...autoBadges])] // Merge manual & auto badges
+          badges: [...new Set([...(userProfile.trustBadges || []), ...autoBadges])] 
         },
         networkPulse: {
             followersCount: userProfile.followers?.length || 0,
@@ -183,27 +233,4 @@ router.get('/:userId', authMiddleware, async (req, res) => {
   }
 });
 
-const { trackEvent } = require('../utils/analyticsHelper');
-
-// ... Inside your GET /:userId route ...
-router.get('/:userId', authMiddleware, async (req, res) => {
-  // ... your existing code ...
-
-  // TRIGGER SILENT ANALYTICS: Track the profile view!
-  trackEvent({
-    actor: req.user.userId,
-    targetUser: targetUserId,
-    eventType: 'PROFILE_VIEW'
-  });
-
-  res.status(200).json({ /* your existing response */ });
-});
-
-// ... Inside your POST /:userId/review route ...
-trackEvent({
-    actor: req.user.userId,
-    targetUser: targetUserId,
-    eventType: 'REVIEW_RECEIVED'
-});
-
-module.exports = router;
+module.exports = router; 
