@@ -2,26 +2,9 @@
 const express = require('express');
 const { Mentorship, User } = require('../models/CoreSchemas');
 const authMiddleware = require('../middleware/authMiddleware');
+const { trackEvent } = require('../utils/analyticsHelper'); // Safely imported at the top
 
 const router = express.Router();
-
-const { trackEvent } = require('../utils/analyticsHelper');
-
-// ... Inside POST /request ...
-trackEvent({
-    actor: menteeId,
-    targetUser: mentorId,
-    eventType: 'MENTORSHIP_REQUEST'
-});
-
-// ... Inside PUT /:requestId/status ...
-if (status === 'Accepted') {
-    trackEvent({
-        actor: req.user.userId, // The mentor who accepted
-        targetUser: request.mentee, // The mentee who got accepted
-        eventType: 'MENTORSHIP_ACCEPTED'
-    });
-}
 
 // --- ROUTE 1: SEND A MENTORSHIP REQUEST ---
 // URL: POST /api/mentorship/request
@@ -62,6 +45,13 @@ router.post('/request', authMiddleware, async (req, res) => {
     });
 
     await newRequest.save();
+
+    // --- SILENT ANALYTICS: Track the Request ---
+    trackEvent({
+        actor: menteeId,
+        targetUser: mentorId,
+        eventType: 'MENTORSHIP_REQUEST'
+    });
 
     res.status(201).json({ message: 'Mentorship request sent successfully!', request: newRequest });
   } catch (error) {
@@ -106,7 +96,14 @@ router.put('/:requestId/status', authMiddleware, async (req, res) => {
     request.status = status;
     await request.save();
 
-    // Future Roadmap note: If status === 'Accepted', we will initialize the `MentorshipSession` workspace here!
+    // --- SILENT ANALYTICS: Track the Acceptance ---
+    if (status === 'Accepted') {
+        trackEvent({
+            actor: req.user.userId, // The mentor who accepted
+            targetUser: request.mentee, // The mentee who got accepted
+            eventType: 'MENTORSHIP_ACCEPTED'
+        });
+    }
 
     res.status(200).json({ message: `Mentorship request ${status}!`, request });
   } catch (error) {
