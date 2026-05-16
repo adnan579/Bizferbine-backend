@@ -12,9 +12,28 @@ router.post('/request', authMiddleware, async (req, res) => {
     const { mentorId, message, scheduledSession } = req.body;
     const menteeId = req.user.userId;
 
-    // Prevent users from requesting themselves
+    // 1. Prevent users from requesting themselves
     if (menteeId === mentorId) {
       return res.status(400).json({ message: "You cannot send a mentorship request to yourself." });
+    }
+
+    // 2. ROADMAP FIX: Role Validation
+    // Ensure the target user is actually registered as a Mentor or Admin
+    const targetMentor = await User.findById(mentorId);
+    if (!targetMentor) return res.status(404).json({ message: "Mentor not found." });
+    if (targetMentor.role !== 'Mentor' && targetMentor.role !== 'Admin' && targetMentor.role !== 'SuperAdmin') {
+      return res.status(400).json({ message: "This user does not have Mentor privileges." });
+    }
+
+    // 3. ROADMAP FIX: Prevent Duplicate Requests
+    const existingRequest = await Mentorship.findOne({
+      mentee: menteeId,
+      mentor: mentorId,
+      status: { $in: ['Pending', 'Accepted'] } // Blocks if already pending or currently active
+    });
+
+    if (existingRequest) {
+      return res.status(400).json({ message: "You already have an active or pending request with this mentor." });
     }
 
     const newRequest = new Mentorship({
@@ -68,6 +87,8 @@ router.put('/:requestId/status', authMiddleware, async (req, res) => {
 
     request.status = status;
     await request.save();
+
+    // Future Roadmap note: If status === 'Accepted', we will initialize the `MentorshipSession` workspace here!
 
     res.status(200).json({ message: `Mentorship request ${status}!`, request });
   } catch (error) {

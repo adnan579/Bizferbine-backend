@@ -12,14 +12,24 @@ router.post('/apply', authMiddleware, async (req, res) => {
   try {
     const { title, description } = req.body;
     
-    // Fetch the user to automatically grab their industry
     const mentee = await User.findById(req.user.userId);
+
+    // ROADMAP FIX: Prevent Duplicate Open Applications
+    // We don't want mentees spamming the board with 10 open applications at once
+    const existingOpenApp = await MentorshipApplication.findOne({
+      mentee: mentee._id,
+      status: 'Open'
+    });
+
+    if (existingOpenApp) {
+      return res.status(400).json({ message: "You already have an open broadcast on the network. Please wait for matches or close it before posting a new one." });
+    }
 
     const newApplication = new MentorshipApplication({
       mentee: mentee._id,
       title,
       description,
-      industry: mentee.industry || 'General' // Failsafe in case industry is blank
+      industry: mentee.industry || 'General' 
     });
 
     await newApplication.save();
@@ -40,30 +50,19 @@ router.get('/matches', authMiddleware, async (req, res) => {
         return res.status(400).json({ message: "Please update your profile with an industry to see matches." });
     }
 
-    // 1. DEBUGGING: Let's see exactly what the mentor's industry is!
     console.log(`\n=== RUNNING ALGORITHM FOR MENTOR INDUSTRY: "${mentor.industry}" ===`);
 
-    // 2. KEYWORD LOGIC: Split the industry into words (e.g., "Information Technology" -> ["Information", "Technology"])
-    // This removes extra spaces and makes the search highly flexible.
     const keywords = mentor.industry.trim().split(/\s+/).map(word => new RegExp(word, 'i'));
 
-    // 3. Find matching applications
+    // Added `.limit(20)` for the pagination roadmap item to prevent overloading the frontend
     const matches = await MentorshipApplication.find({
       status: 'Open',
-      industry: { $in: keywords }, // $in searches for ANY of the keywords!
+      industry: { $in: keywords }, 
       mentee: { $ne: mentor._id } 
-    }).populate('mentee', 'name role industry');
-
-    // 4. DEBUGGING: Let's pull ALL open apps just to see what exists in the database
-    const allOpenApps = await MentorshipApplication.find({ status: 'Open' });
-    console.log("All Open Applications Currently in DB:", allOpenApps.map(app => ({
-        menteeId: app.mentee,
-        industrySavedAs: app.industry
-    })));
-    console.log("==============================================================\n");
+    }).populate('mentee', 'name role industry').limit(20);
 
     res.status(200).json({ 
-      message: `Found ${matches.length} applications matching your expertise in ${mentor.industry}.`, 
+      message: `Found ${matches.length} applications matching your expertise.`, 
       matches 
     });
   } catch (error) {
@@ -85,26 +84,30 @@ router.post('/:applicationId/offer', authMiddleware, async (req, res) => {
     if (!application) return res.status(404).json({ message: 'Application not found.' });
     if (application.status !== 'Open') return res.status(400).json({ message: 'This application is no longer open.' });
 
-    // Ensure the mentor hasn't already sent an offer
+    // ROADMAP FIX: Ensure the user sending the offer is actually a Mentor
+    const mentorUser = await User.findById(mentorId);
+    if (mentorUser.role !== 'Mentor' && mentorUser.role !== 'Admin' && mentorUser.role !== 'SuperAdmin') {
+      return res.status(403).json({ message: 'Only verified Mentors can dispatch offers on the board.' });
+    }
+
     const alreadyOffered = application.offers.some(offer => offer.mentorId.toString() === mentorId);
     if (alreadyOffered) return res.status(400).json({ message: 'You have already sent an offer for this application.' });
 
-    // Push the offer into the array
     application.offers.push({
       mentorId: mentorId,
       message: message
     });
 
     await application.save();
-    // --- NEW: TRIGGER MENTORSHIP NOTIFICATION ---
+
     await sendNotification({
-        recipient: application.mentee, // The person who wrote the application
-        sender: mentorId,              // The mentor sending the offer
+        recipient: application.mentee, 
+        sender: mentorId,              
         type: 'MentorshipOffer',
         message: `You have received a new mentorship offer for your application: "${application.title}"`,
         targetId: application._id
     });
-    // --------------------------------------------
+
     res.status(201).json({ message: 'Offer sent successfully to the Mentee!', application });
   } catch (error) {
     console.error('Offer Error:', error);

@@ -112,6 +112,40 @@ const mentorshipSchema = new mongoose.Schema({
   scheduledSession: { type: Date }
 }, { timestamps: true });
 
+// --- NEW: MENTORSHIP WORKSPACE & SESSION SCHEMA ---
+const mentorshipSessionSchema = new mongoose.Schema({
+  mentorshipConnection: { type: mongoose.Schema.Types.ObjectId, ref: 'Mentorship', required: true },
+  mentor: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  mentee: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  title: { type: String, required: true }, // e.g., "Onboarding & Goal Setting"
+  scheduledAt: { type: Date, required: true },
+  status: { type: String, enum: ['Scheduled', 'Completed', 'Canceled', 'No-Show'], default: 'Scheduled' },
+  meetingLink: { type: String }, // Zoom/Google Meet link
+  
+  // Workspace Data
+  sharedNotes: { type: String },
+  actionItems: [{
+    task: { type: String },
+    isCompleted: { type: Boolean, default: false }
+  }],
+  
+  // Post-Session Evaluation
+  menteeFeedback: { type: String },
+  mentorFeedback: { type: String }
+}, { timestamps: true });
+
+// --- NEW: MENTOR REVIEW & TRUST SCHEMA ---
+const mentorReviewSchema = new mongoose.Schema({
+  mentor: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  mentee: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  mentorshipConnection: { type: mongoose.Schema.Types.ObjectId, ref: 'Mentorship' },
+  rating: { type: Number, required: true, min: 1, max: 5 },
+  reviewText: { type: String, required: true },
+  skillsEndorsed: [{ type: String }], // What skills did the mentor actually help with?
+  createdAt: { type: Date, default: Date.now }
+});
+
+
 // --- CONNECTION SCHEMA ---
 const connectionSchema = new mongoose.Schema({
   requester: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
@@ -258,8 +292,11 @@ const Notification = mongoose.model('Notification', notificationSchema);
 const BarterWorkspace = mongoose.model('BarterWorkspace', barterWorkspaceSchema); // New!
 const WellnessLog = mongoose.model('WellnessLog', wellnessLogSchema); // New!
 const Dispute = mongoose.model('Dispute', disputeSchema);
+const MentorshipSession = mongoose.model('MentorshipSession', mentorshipSessionSchema);
+const MentorReview = mongoose.model('MentorReview', mentorReviewSchema);
+
 
 // UPDATE YOUR EXPORTS TO INCLUDE BarterWorkspace
 // Export all models
 module.exports = { User, Event, Deal, Mentorship, Connection, Message, Insight, MentorshipApplication, 
-  SkillExchange, Notification, BarterWorkspace, WellnessLog, Dispute };
+  SkillExchange, Notification, BarterWorkspace, WellnessLog, Dispute, MentorshipSession, MentorReview };
