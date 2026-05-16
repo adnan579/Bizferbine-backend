@@ -29,13 +29,14 @@ router.put('/', authMiddleware, upload.fields([
     { name: 'profileBanner', maxCount: 1 }
 ]), async (req, res) => {
   try {
-    const { name, username, headline, bio, location, linkedIn, github, website, skills } = req.body;
+    const { name, username, headline, industry, bio, location, linkedIn, github, website, skills } = req.body; // Added industry
     
     const user = await User.findById(req.user.userId);
     if (!user) return res.status(404).json({ message: 'User not found.' });
 
     if (name) user.name = name;
     if (headline) user.headline = headline;
+    if (industry) user.industry = industry; // Added this!
     if (bio) user.bio = bio;
     if (location) user.location = location;
 
