@@ -5,6 +5,24 @@ const authMiddleware = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
+const { trackEvent } = require('../utils/analyticsHelper');
+
+// ... Inside POST /request ...
+trackEvent({
+    actor: menteeId,
+    targetUser: mentorId,
+    eventType: 'MENTORSHIP_REQUEST'
+});
+
+// ... Inside PUT /:requestId/status ...
+if (status === 'Accepted') {
+    trackEvent({
+        actor: req.user.userId, // The mentor who accepted
+        targetUser: request.mentee, // The mentee who got accepted
+        eventType: 'MENTORSHIP_ACCEPTED'
+    });
+}
+
 // --- ROUTE 1: SEND A MENTORSHIP REQUEST ---
 // URL: POST /api/mentorship/request
 router.post('/request', authMiddleware, async (req, res) => {

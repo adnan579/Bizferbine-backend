@@ -183,4 +183,27 @@ router.get('/:userId', authMiddleware, async (req, res) => {
   }
 });
 
+const { trackEvent } = require('../utils/analyticsHelper');
+
+// ... Inside your GET /:userId route ...
+router.get('/:userId', authMiddleware, async (req, res) => {
+  // ... your existing code ...
+
+  // TRIGGER SILENT ANALYTICS: Track the profile view!
+  trackEvent({
+    actor: req.user.userId,
+    targetUser: targetUserId,
+    eventType: 'PROFILE_VIEW'
+  });
+
+  res.status(200).json({ /* your existing response */ });
+});
+
+// ... Inside your POST /:userId/review route ...
+trackEvent({
+    actor: req.user.userId,
+    targetUser: targetUserId,
+    eventType: 'REVIEW_RECEIVED'
+});
+
 module.exports = router;

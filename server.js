@@ -32,6 +32,7 @@ const barterWorkspaceRoutes = require('./routes/barterWorkspace'); // New route 
 const wellnessRoutes = require('./routes/wellness'); // New route for Wellness Logs
 const adminRoutes = require('./routes/admin'); // New route for Admin Panel
 const disputesRoutes = require('./routes/disputes'); // New route for Dispute Resolution System
+const analyticsRoutes = require('./routes/analytics'); // New route for Analytics Tracking
 
 // Initialize the Express application
 const app = express();
@@ -105,6 +106,7 @@ app.use('/api/barter-workspace', require('./routes/barterWorkspace'));
 app.use('/api/wellness', require('./routes/wellness'));
 app.use('/api/admin', require('./routes/admin')); // New route for admin panel
 app.use('/api/disputes', require('./routes/disputes')); // New route for dispute resolution system
+app.use('/api/analytics', require('./routes/analytics')); // New route for analytics tracking
 
 // Basic Test Route
 app.get('/', (req, res) => {

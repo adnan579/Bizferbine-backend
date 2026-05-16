@@ -278,6 +278,45 @@ const disputeSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now }
 });
 
+// --- NEW: ANALYTICS EVENT SCHEMA (The Silent Tracker) ---
+const analyticsEventSchema = new mongoose.Schema({
+  actor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Who did the action (null if anonymous)
+  targetUser: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }, // Who receives the dopamine
+  eventType: {
+    type: String,
+    enum: [
+      'PROFILE_VIEW', 
+      'PORTFOLIO_CLICK', 
+      'FOLLOW', 
+      'MENTORSHIP_REQUEST', 
+      'MENTORSHIP_ACCEPTED',
+      'REVIEW_RECEIVED', 
+      'INSIGHT_VIEW', 
+      'CASE_STUDY_VIEW', 
+      'GITHUB_CLICK', 
+      'WEBSITE_CLICK',
+      'LINKEDIN_CLICK'
+    ],
+    required: true
+  },
+  metadata: { type: mongoose.Schema.Types.Mixed }, // Flexible object for extra data (e.g., { portfolioId: '...' })
+  createdAt: { type: Date, default: Date.now, expires: '90d' } // Auto-delete raw events after 90 days to save DB space!
+});
+
+// --- NEW: ANALYTICS SUMMARY SCHEMA (For Phase 2 Micro-Dopamine) ---
+const analyticsSummarySchema = new mongoose.Schema({
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  dailyProfileViews: { type: Number, default: 0 },
+  weeklyProfileViews: { type: Number, default: 0 },
+  githubClicks: { type: Number, default: 0 },
+  mentorshipRequests: { type: Number, default: 0 },
+  insightViews: { type: Number, default: 0 },
+  calculatedAt: { type: Date, default: Date.now }
+});
+
+
+// Make sure to add AnalyticsEvent and AnalyticsSummary to your module.exports!
+
 // Compile ALL blueprints
 const User = mongoose.model('User', userSchema);
 const Event = mongoose.model('Event', eventSchema);
@@ -294,9 +333,12 @@ const WellnessLog = mongoose.model('WellnessLog', wellnessLogSchema); // New!
 const Dispute = mongoose.model('Dispute', disputeSchema);
 const MentorshipSession = mongoose.model('MentorshipSession', mentorshipSessionSchema);
 const MentorReview = mongoose.model('MentorReview', mentorReviewSchema);
+const AnalyticsEvent = mongoose.model('AnalyticsEvent', analyticsEventSchema);
+const AnalyticsSummary = mongoose.model('AnalyticsSummary', analyticsSummarySchema);
 
 
 // UPDATE YOUR EXPORTS TO INCLUDE BarterWorkspace
 // Export all models
 module.exports = { User, Event, Deal, Mentorship, Connection, Message, Insight, MentorshipApplication, 
-  SkillExchange, Notification, BarterWorkspace, WellnessLog, Dispute, MentorshipSession, MentorReview };
+  SkillExchange, Notification, BarterWorkspace, WellnessLog, 
+  Dispute, MentorshipSession, MentorReview, AnalyticsEvent, AnalyticsSummary };
