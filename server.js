@@ -1,4 +1,5 @@
 require('dotenv').config(); // MUST be the very first line
+require('./cron/analyticsWorker'); // Wakes up the analytics aggregation engine
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
