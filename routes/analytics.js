@@ -1,12 +1,12 @@
 // routes/analytics.js
 const express = require('express');
 const { trackEvent } = require('../utils/analyticsHelper');
-const { AnalyticsSummary } = require('../models/CoreSchemas');
+const { AnalyticsSummary, AnalyticsEvent } = require('../models/CoreSchemas'); // Added AnalyticsEvent
 const authMiddleware = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
-// --- ROUTE 1: SILENT EVENT LISTENER (From Phase 1.5) ---
+// --- ROUTE 1: SILENT EVENT LISTENER ---
 router.post('/track', authMiddleware, (req, res) => {
   const { targetUser, eventType, metadata } = req.body;
   const actor = req.user.userId;
@@ -14,19 +14,27 @@ router.post('/track', authMiddleware, (req, res) => {
   res.status(200).send();
 });
 
-// --- ROUTE 2: FETCH USER ANALYTICS SUMMARY (Phase 2) ---
+// --- ROUTE 2: FETCH USER ANALYTICS SUMMARY & RECENT PULSE ---
 router.get('/summary', authMiddleware, async (req, res) => {
   try {
-    const summary = await AnalyticsSummary.findOne({ user: req.user.userId });
+    const userId = req.user.userId;
+
+    // 1. Fetch the Aggregated Summary
+    let summary = await AnalyticsSummary.findOne({ user: userId });
     
-    // If cron hasn't run yet or user is brand new, send a 0-state payload
+    // If cron hasn't run yet, provide a baseline payload
     if (!summary) {
-        return res.status(200).json({
-            weeklyProfileViews: 0, projectClicks: 0, mentorshipRequests: 0, isNew: true
-        });
+        summary = { weeklyProfileViews: 0, projectClicks: 0, mentorshipRequests: 0, isNew: true };
     }
 
-    res.status(200).json(summary);
+    // 2. Fetch the Live Recent Pulse (Limit 4 for extreme performance)
+    const recentPulse = await AnalyticsEvent.find({ targetUser: userId })
+        .sort({ createdAt: -1 })
+        .limit(4)
+        .populate('actor', 'name role'); // Crucial: Who triggered the event?
+
+    // 3. Return both as a bundled JSON response
+    res.status(200).json({ summary, recentPulse });
   } catch (error) {
     res.status(500).json({ message: 'Server error fetching analytics.' });
   }
