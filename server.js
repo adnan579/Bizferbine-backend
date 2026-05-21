@@ -1,20 +1,19 @@
 require('dotenv').config(); // MUST be the very first line
 require('./cron/analyticsWorker'); // Wakes up the analytics aggregation engine
+
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const http = require('http');
+const path = require('path'); // Moved to the top for best practices
 const { Server } = require('socket.io');
 
 // --- THE DNS BYPASS ---
-// Forces Node.js to use Google's Public DNS instead of the Windows local resolver.
-// This bypasses Antivirus/Firewall blocks causing the ECONNREFUSED error.
 const dns = require('dns');
 dns.setServers(['8.8.8.8', '8.8.4.4']);
 // ----------------------
 
-// 1. IMPORT YOUR NEW ROUTES HERE
-// This links to the routes/auth.js file we created earlier
+// 1. IMPORT ALL ROUTES CLEANLY
 const authRoutes = require('./routes/auth'); 
 const profileRoutes = require('./routes/profile');
 const eventRoutes = require('./routes/events');
@@ -27,13 +26,13 @@ const insightRoutes = require('./routes/insights');
 const mentorshipBoardRoutes = require('./routes/mentorshipBoard');
 const paymentRoutes = require('./routes/payments');
 const skillExchangeRoutes = require('./routes/skillExchange');
-const { Notification } = require('./models/CoreSchemas'); // Import the Notification model
+const notificationRoutes = require('./routes/notifications'); 
 const searchRoutes = require('./routes/search');
-const barterWorkspaceRoutes = require('./routes/barterWorkspace'); // New route for Barter Workspace
-const wellnessRoutes = require('./routes/wellness'); // New route for Wellness Logs
-const adminRoutes = require('./routes/admin'); // New route for Admin Panel
-const disputesRoutes = require('./routes/disputes'); // New route for Dispute Resolution System
-const analyticsRoutes = require('./routes/analytics'); // New route for Analytics Tracking
+const barterWorkspaceRoutes = require('./routes/barterWorkspace'); 
+const wellnessRoutes = require('./routes/wellness'); 
+const adminRoutes = require('./routes/admin'); 
+const disputesRoutes = require('./routes/disputes'); 
+const analyticsRoutes = require('./routes/analytics'); 
 
 // Initialize the Express application
 const app = express();
@@ -42,12 +41,13 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "https://beta.setupgram.com", // Your frontend URL
+    // Array allows BOTH your live site and local testing to connect!
+    origin: ["https://beta.setupgram.com", "http://localhost:5173", "http://localhost:3000"], 
     methods: ["GET", "POST", "PUT", "DELETE"]
   }
 });
 
-// Attach 'io' to the Express app so we can use it inside our routes (like admin.js!)
+// Attach 'io' to the Express app so we can use it inside our routes
 app.set('io', io);
 
 // Listen for real-time connections
@@ -76,38 +76,38 @@ io.on('connection', (socket) => {
 app.use(cors());
 app.use(express.json());
 
+// Securely Serve the Uploads folder
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 // Variables from your .env file
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 
 // --- DIAGNOSTIC TOOL ---
-// Keeps an eye on your database connection string
 console.log("Diagnostic Check: Is MONGO_URI loaded?");
 console.log("Value of MONGO_URI:", MONGO_URI ? "Yes, it is a string!" : "No, it is undefined.");
 // -----------------------
 
-// 2. TELL EXPRESS TO USE YOUR ROUTES HERE
-// Any request that starts with /api/auth will be sent to your auth.js file
+// 2. MOUNT ALL ROUTES
 app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
-app.use('/api/events', require('./routes/events'));
+app.use('/api/events', eventRoutes);
 app.use('/api/deals', dealRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/mentorship', mentorshipRoutes);
 app.use('/api/network', networkRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/insights', insightRoutes);
-app.use('/uploads', express.static('uploads'));
 app.use('/api/mentorship-board', mentorshipBoardRoutes);
 app.use('/api/payments', paymentRoutes); 
 app.use('/api/skill-exchange', skillExchangeRoutes);
-app.use('/api/notifications', require('./routes/notifications')); // New route for notifications
-app.use('/api/search', searchRoutes); // New route for global search engine
-app.use('/api/barter-workspace', require('./routes/barterWorkspace'));
-app.use('/api/wellness', require('./routes/wellness'));
-app.use('/api/admin', require('./routes/admin')); // New route for admin panel
-app.use('/api/disputes', require('./routes/disputes')); // New route for dispute resolution system
-app.use('/api/analytics', require('./routes/analytics')); // New route for analytics tracking
+app.use('/api/notifications', notificationRoutes); 
+app.use('/api/search', searchRoutes); 
+app.use('/api/barter-workspace', barterWorkspaceRoutes);
+app.use('/api/wellness', wellnessRoutes);
+app.use('/api/admin', adminRoutes); 
+app.use('/api/disputes', disputesRoutes); 
+app.use('/api/analytics', analyticsRoutes); 
 
 // Basic Test Route
 app.get('/', (req, res) => {
@@ -121,6 +121,7 @@ mongoose.connect(MONGO_URI, {
 })
   .then(() => {
     console.log('Successfully connected to MongoDB!');
+    // IMPORTANT: 'server.listen' must be used instead of 'app.listen' for WebSockets to work
     server.listen(PORT, () => console.log(`🚀 Server & WebSockets running on port ${PORT}`));
   })
   .catch((error) => {
