@@ -2,22 +2,38 @@
 const express = require('express');
 const { sendNotification } = require('../utils/notificationHelper');
 const multer = require('multer');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const { Insight } = require('../models/CoreSchemas');
 const authMiddleware = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
-// --- MULTER CONFIGURATION FOR IMAGES ---
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'uploads/'); // Saves files to the 'uploads' folder
-  },
-  filename: function (req, file, cb) {
-    // Adds a timestamp to prevent overwriting files with the same name
-    cb(null, Date.now() + '-' + file.originalname); 
+// --- NEW: CLOUDINARY CDN CONFIGURATION ---
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'bizferbine_insights', // Keeps feed images organized separately from profile pics
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+    transformation: [{ width: 1000, crop: 'limit' }] // Auto-optimizes massive images!
   }
 });
-const upload = multer({ storage: storage });
+
+// Added File Type Validation and 5MB Limit
+const upload = multer({ 
+  storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB Limit
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Only image files are permitted!'), false);
+  }
+});
 
 // --- ROUTE 1: CREATE A NEW INSIGHT (With optional Image) ---
 // URL: POST /api/insights
@@ -40,7 +56,7 @@ router.post('/', authMiddleware, upload.single('image'), async (req, res) => {
     // 3. Check if an image was uploaded and store its path
     let imagePath = null;
     if (req.file) {
-      imagePath = req.file.path;
+      imagePath = req.file.path; // This is now the permanent Cloudinary URL!
     }
 
     // 4. SMART TAG PARSING: Safely handle tags whether they arrive as a string or array

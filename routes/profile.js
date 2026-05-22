@@ -1,20 +1,32 @@
 // routes/profile.js
 const express = require('express');
 const { sendNotification } = require('../utils/notificationHelper');
-const { trackEvent } = require('../utils/analyticsHelper'); // NEW: Import the silent tracker
+const { trackEvent } = require('../utils/analyticsHelper');
 const multer = require('multer');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const { User, Insight } = require('../models/CoreSchemas');
 const authMiddleware = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
-// --- SECURE MULTER CONFIGURATION (PHASE 1 ROADMAP FIX) ---
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) { cb(null, 'uploads/'); },
-  filename: function (req, file, cb) { cb(null, Date.now() + '-' + file.originalname); }
+// --- NEW: CLOUDINARY CDN CONFIGURATION ---
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// Added File Type Validation and 5MB Size Limit to prevent server crashing/malware
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'bizferbine_profiles', // Creates a clean folder in your Cloudinary account
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+    transformation: [{ width: 1000, crop: 'limit' }] // Auto-optimizes massive images!
+  }
+});
+
+// Added back the File Type Validation to prevent sending bad files to Cloudinary
 const upload = multer({ 
   storage: storage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB Limit
@@ -56,6 +68,7 @@ router.put('/', authMiddleware, upload.fields([
     if (website !== undefined) user.socialLinks.website = website;
 
     if (req.files) {
+        // req.files.path now contains the secure Cloudinary URL!
         if (req.files['profilePicture']) user.profilePictureUrl = req.files['profilePicture'][0].path;
         if (req.files['profileBanner']) user.profileBannerUrl = req.files['profileBanner'][0].path;
     }
@@ -79,7 +92,7 @@ router.post('/portfolio', authMiddleware, upload.single('projectImage'), async (
 
     const user = await User.findById(req.user.userId);
     let imagePath = null;
-    if (req.file) imagePath = req.file.path;
+    if (req.file) imagePath = req.file.path; // This is now the Cloudinary URL
 
     user.portfolio.push({
       title, challenge, solution, result, projectUrl, githubUrl, imageUrl: imagePath,
@@ -233,4 +246,4 @@ router.get('/:userId', authMiddleware, async (req, res) => {
   }
 });
 
-module.exports = router; 
+module.exports = router;

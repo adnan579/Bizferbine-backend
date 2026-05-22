@@ -222,7 +222,8 @@ const notificationSchema = new mongoose.Schema({
   type: { 
     type: String, 
     // We are adding new types here for Deal Rooms and Insights!
-    enum: ['MentorshipOffer', 'SkillProposal', 'NewFollower', 'Testimonial', 'DealRoomUpdate', 'InsightInteraction', 'System', 'NewReview', 'BarterProposal', 'BarterUpdate'], 
+    enum: ['MentorshipOffer', 'SkillProposal', 'NewFollower', 'Testimonial', 'DealRoomUpdate', 'InsightInteraction', 'System', 'NewReview', 
+      'BarterProposal', 'BarterUpdate', 'ConnectionRequest', 'ConnectionAccepted'], 
     required: true 
   },
   message: { type: String, required: true }, 
