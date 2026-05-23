@@ -1,11 +1,12 @@
 // routes/profile.js
 const express = require('express');
+const mongoose = require('mongoose');
 const { sendNotification } = require('../utils/notificationHelper');
 const { trackEvent } = require('../utils/analyticsHelper');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
-const { User, Insight, Event, BarterWorkspace, MentorshipSession, Deal, MentorReview } = require('../models/CoreSchemas');
+const { User, Insight, Event, BarterWorkspace, MentorshipSession, Deal, MentorReview, AnalyticsEvent } = require('../models/CoreSchemas');
 const authMiddleware = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -21,25 +22,25 @@ const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
     folder: 'bizferbine_profiles', // Creates a clean folder in your Cloudinary account
-    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
-    transformation: [{ width: 1000, crop: 'limit' }] // Auto-optimizes massive images!
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'mp4', 'webm'],
+    resource_type: 'auto'
   }
 });
 
-// Added back the File Type Validation to prevent sending bad files to Cloudinary
 const upload = multer({ 
   storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB Limit
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB Limit
   fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) cb(null, true);
-    else cb(new Error('Only image files are permitted!'), false);
+    if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')) cb(null, true);
+    else cb(new Error('Only image and video files are permitted!'), false);
   }
 });
 
 // --- ROUTE 1: UPDATE IDENTITY & BRANDING ---
 router.put('/', authMiddleware, upload.fields([
     { name: 'profilePicture', maxCount: 1 }, 
-    { name: 'profileBanner', maxCount: 1 }
+    { name: 'profileBanner', maxCount: 1 },
+    { name: 'pitchVideo', maxCount: 1 }
 ]), async (req, res) => {
   try {
     const { name, username, headline, industry, bio, location, linkedIn, github, website, skills, activeDirectiveIntent, activeDirectiveText } = req.body;
@@ -295,6 +296,34 @@ router.get('/:userId', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Fetch Profile Error:', error);
     res.status(500).json({ message: 'Server error fetching profile.' });
+  }
+});
+
+// --- ROUTE 6: THE ECOSYSTEM TELEMETRY HEATMAP ---
+// URL: GET /api/profile/:userId/heatmap
+router.get('/:userId/heatmap', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const heatmapData = await AnalyticsEvent.aggregate([
+      { $match: { targetUser: new mongoose.Types.ObjectId(userId) } },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          date: "$_id",
+          count: 1
+        }
+      }
+    ]);
+    res.status(200).json(heatmapData);
+  } catch (error) {
+    console.error('Heatmap Error:', error);
+    res.status(500).json({ message: 'Server error retrieving telemetry.' });
   }
 });
 
