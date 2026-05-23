@@ -5,7 +5,7 @@ const { trackEvent } = require('../utils/analyticsHelper');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
-const { User, Insight, Event, BarterWorkspace, MentorshipSession } = require('../models/CoreSchemas');
+const { User, Insight, Event, BarterWorkspace, MentorshipSession, Deal, MentorReview } = require('../models/CoreSchemas');
 const authMiddleware = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -77,6 +77,7 @@ router.put('/', authMiddleware, upload.fields([
         // req.files.path now contains the secure Cloudinary URL!
         if (req.files['profilePicture']) user.profilePictureUrl = req.files['profilePicture'][0].path;
         if (req.files['profileBanner']) user.profileBannerUrl = req.files['profileBanner'][0].path;
+        if (req.files['pitchVideo']) user.pitchVideoUrl = req.files['pitchVideo'][0].path; // Save video URL
     }
 
     await user.save();
@@ -203,11 +204,15 @@ router.get('/:userId', authMiddleware, async (req, res) => {
     // Added Pagination/Limits to prevent database throttling
     const recentInsights = await Insight.find({ author: targetUserId }).sort({ createdAt: -1 }).limit(10);
 
+    // Collect all skills endorsed from barter and mentor reviews
+    const endorsedSkillsFromBarters = userProfile.barterReviews?.filter(r => r.rating >= 4).flatMap(r => r.skillsEndorsed || []) || [];
+    const endorsedSkillsFromMentors = (await MentorReview.find({ mentor: targetUserId, rating: { $gte: 4 } }).select('skillsEndorsed')).flatMap(r => r.skillsEndorsed || []);
+    const verifiedSkills = [...new Set([...endorsedSkillsFromBarters, ...endorsedSkillsFromMentors])]; // Unique verified skills
+
     // --- THE REPUTATION ENGINE ALGORITHM ---
     let repScore = 50; // Baseline score
     let autoBadges = [];
 
-    // 1. Barter Review Impact (+ or -)
     if (userProfile.barterReviews && userProfile.barterReviews.length > 0) {
       const avgRating = userProfile.barterReviews.reduce((acc, curr) => acc + curr.rating, 0) / userProfile.barterReviews.length;
       repScore += (avgRating - 3) * 10; // 5 star adds 20 pts, 1 star subtracts 20 pts
@@ -284,6 +289,7 @@ router.get('/:userId', authMiddleware, async (req, res) => {
             followingCount: userProfile.following?.length || 0
         },
         verifiedExecution,
+        verifiedSkills, // Add verified skills to the payload
         mutualConnections
     });
   } catch (error) {

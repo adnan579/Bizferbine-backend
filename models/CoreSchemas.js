@@ -28,6 +28,7 @@ const userSchema = new mongoose.Schema({
   },
   profilePictureUrl: { type: String },
   profileBannerUrl: { type: String }, // Custom Banner
+  pitchVideoUrl: { type: String }, // NEW: The Asynchronous Elevator Pitch
   location: { type: String }, 
   socialLinks: {
     linkedIn: { type: String },
@@ -71,6 +72,7 @@ const userSchema = new mongoose.Schema({
     workspace: { type: mongoose.Schema.Types.ObjectId, ref: 'BarterWorkspace' },
     rating: { type: Number, required: true, min: 1, max: 5 },
     text: { type: String, required: true },
+    skillsEndorsed: [{ type: String }], // NEW: Proof-of-Work Validation
     createdAt: { type: Date, default: Date.now }
   }]
 }, { timestamps: true });
