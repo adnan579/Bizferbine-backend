@@ -5,7 +5,7 @@ const { trackEvent } = require('../utils/analyticsHelper');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
-const { User, Insight, Event } = require('../models/CoreSchemas');
+const { User, Insight, Event, BarterWorkspace, MentorshipSession } = require('../models/CoreSchemas');
 const authMiddleware = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -42,7 +42,7 @@ router.put('/', authMiddleware, upload.fields([
     { name: 'profileBanner', maxCount: 1 }
 ]), async (req, res) => {
   try {
-    const { name, username, headline, industry, bio, location, linkedIn, github, website, skills } = req.body;
+    const { name, username, headline, industry, bio, location, linkedIn, github, website, skills, activeDirectiveIntent, activeDirectiveText } = req.body;
     
     const user = await User.findById(req.user.userId);
     if (!user) return res.status(404).json({ message: 'User not found.' });
@@ -61,6 +61,12 @@ router.put('/', authMiddleware, upload.fields([
     }
     
     if (skills) user.skills = skills.split(',').map(skill => skill.trim());
+
+    if (activeDirectiveIntent || activeDirectiveText) {
+      if (!user.activeDirective) user.activeDirective = {};
+      if (activeDirectiveIntent) user.activeDirective.intent = activeDirectiveIntent;
+      if (activeDirectiveText !== undefined) user.activeDirective.text = activeDirectiveText;
+    }
 
     if (!user.socialLinks) user.socialLinks = {};
     if (linkedIn !== undefined) user.socialLinks.linkedIn = linkedIn;
@@ -236,6 +242,33 @@ router.get('/:userId', authMiddleware, async (req, res) => {
       }
     }
 
+    // PHASE 2: Verified Execution
+    const completedBarters = await BarterWorkspace.countDocuments({
+      $or: [{ initiator: targetUserId }, { partner: targetUserId }],
+      status: 'Completed'
+    });
+
+    const completedMentorships = await MentorshipSession.countDocuments({
+      $or: [{ mentor: targetUserId }, { mentee: targetUserId }],
+      status: 'Completed'
+    });
+
+    const verifiedExecution = {
+      eventsHosted: userEvents ? userEvents.length : 0,
+      bartersCompleted: completedBarters,
+      mentorshipsCompleted: completedMentorships
+    };
+
+    // PHASE 3: Mutual Trust Graph
+    let mutualConnections = [];
+    if (req.user.userId !== targetUserId) {
+        const currentUser = await User.findById(req.user.userId).select('following');
+        if (currentUser && currentUser.following && userProfile.followers) {
+            const mutualIds = currentUser.following.filter(id => userProfile.followers.includes(id));
+            mutualConnections = await User.find({ _id: { $in: mutualIds } }).select('name profilePictureUrl username').limit(5);
+        }
+    }
+
     // Cap score at 99 for realism
     repScore = Math.min(Math.max(Math.floor(repScore), 10), 99);
 
@@ -249,7 +282,9 @@ router.get('/:userId', authMiddleware, async (req, res) => {
         networkPulse: {
             followersCount: userProfile.followers?.length || 0,
             followingCount: userProfile.following?.length || 0
-        }
+        },
+        verifiedExecution,
+        mutualConnections
     });
   } catch (error) {
     console.error('Fetch Profile Error:', error);

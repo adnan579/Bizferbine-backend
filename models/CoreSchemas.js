@@ -22,6 +22,10 @@ const userSchema = new mongoose.Schema({
   // 1. Dynamic Identity & Branding
   headline: { type: String, maxLength: 150 }, // Smart Headline (Value Prop)
   bio: { type: String, maxLength: 1000 }, // Keyword-Rich "About" Section
+  activeDirective: {
+    intent: { type: String, enum: ['Seeking Funding', 'Offering Mentorship', 'Actively Bartering', 'Accepting Mentees', 'Open to Collaborate', 'None'], default: 'None' },
+    text: { type: String, maxLength: 50 }
+  },
   profilePictureUrl: { type: String },
   profileBannerUrl: { type: String }, // Custom Banner
   location: { type: String }, 
