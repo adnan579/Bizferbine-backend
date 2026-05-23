@@ -5,7 +5,7 @@ const { trackEvent } = require('../utils/analyticsHelper');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
-const { User, Insight } = require('../models/CoreSchemas');
+const { User, Insight, Event } = require('../models/CoreSchemas');
 const authMiddleware = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -223,6 +223,17 @@ router.get('/:userId', authMiddleware, async (req, res) => {
     if (userProfile.portfolio && userProfile.portfolio.length >= 2) {
       repScore += 5;
       autoBadges.push("Verified Builder");
+    }
+
+    // 5. PHASE 4: Event Hosting & Escrow Synergy
+    const userEvents = await Event.find({ organizerId: targetUserId });
+    if (userEvents && userEvents.length > 0) {
+      repScore += userEvents.length * 5; // +5 points for every event hosted!
+      const hasSoldOut = userEvents.some(e => e.registeredAttendees?.length >= e.maxCapacity);
+      if (hasSoldOut) {
+        repScore += 10;
+        autoBadges.push("Ecosystem Leader");
+      }
     }
 
     // Cap score at 99 for realism
