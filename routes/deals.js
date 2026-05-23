@@ -51,6 +51,7 @@ router.post('/:dealId/proposals', authMiddleware, async (req, res) => {
     const isInitiator = deal.initiator.toString() === req.user.userId;
     const isParticipant = deal.participants.includes(req.user.userId);
     if (!isInitiator && !isParticipant) return res.status(403).json({ message: 'Access denied.' });
+    if (deal.status === 'Frozen' || deal.status === 'Closed') return res.status(400).json({ message: 'This Deal Room is locked.' });
 
     deal.proposals.push({ senderId: req.user.userId, message, amount });
     if (deal.status === 'Open') deal.status = 'Negotiating';
@@ -80,6 +81,7 @@ router.post('/:dealId/documents', authMiddleware, upload.single('document'), asy
       const isInitiator = deal.initiator.toString() === req.user.userId;
       const isParticipant = deal.participants.includes(req.user.userId);
       if (!isInitiator && !isParticipant) return res.status(403).json({ message: 'Access denied.' });
+      if (deal.status === 'Frozen' || deal.status === 'Closed') return res.status(400).json({ message: 'This Deal Room is locked.' });
   
       if (!req.file) return res.status(400).json({ message: 'No document provided.' });
   
@@ -117,6 +119,7 @@ router.put('/:dealId/status', authMiddleware, async (req, res) => {
     const isInitiator = deal.initiator.toString() === req.user.userId;
     const isParticipant = deal.participants.includes(req.user.userId);
     if (!isInitiator && !isParticipant) return res.status(403).json({ message: 'Access denied.' });
+    if (deal.status === 'Frozen') return res.status(400).json({ message: 'This Deal Room has been quarantined by an Admin.' });
 
     deal.status = status;
     await deal.save();

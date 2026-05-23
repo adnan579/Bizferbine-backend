@@ -1,8 +1,9 @@
 // routes/admin.js
 const express = require('express');
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 // FIXED: All schemas are now properly imported!
-const { User, Dispute, Deal, SkillExchange, BarterWorkspace, MentorshipApplication, Insight, Event, Connection, Notification } = require('../models/CoreSchemas');
+const { User, Dispute, Deal, SkillExchange, BarterWorkspace, MentorshipSession, MentorshipApplication, Insight, Event, Connection, Notification } = require('../models/CoreSchemas');
 const authMiddleware = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -145,7 +146,15 @@ router.get('/analytics', authMiddleware, verifyAdmin, async (req, res) => {
     const totalEvents = await Event.countDocuments();
     const totalConnections = await Connection.countDocuments({ status: 'Accepted' });
 
-    res.status(200).json({ totalMentorships, totalInsights, totalEvents, totalConnections });
+    // Phase 2: Ecosystem Economy Dashboard
+    const events = await Event.find();
+    let economyVolume = 0;
+    events.forEach(e => {
+       economyVolume += (e.ticketPrice || 0) * (e.registeredAttendees?.length || 0);
+       economyVolume += (e.sponsorshipPrice || 0) * (e.sponsors?.length || 0);
+    });
+
+    res.status(200).json({ totalMentorships, totalInsights, totalEvents, totalConnections, economyVolume });
   } catch (error) {
     res.status(500).json({ message: 'Error fetching analytics.' });
   }
@@ -154,14 +163,25 @@ router.get('/analytics', authMiddleware, verifyAdmin, async (req, res) => {
 // --- ROUTE 7: GET WORKSPACE CHAT LOGS FOR DISPUTES ---
 router.get('/workspaces/:id/logs', authMiddleware, verifyAdmin, async (req, res) => {
   try {
-    // Find the workspace and populate the sender info so we know who said what
-    const workspace = await BarterWorkspace.findById(req.params.id)
-      .populate('messages.sender', 'name profilePictureUrl role');
-      
-    if (!workspace) return res.status(404).json({ message: 'Workspace not found.' });
+    const { module } = req.query;
     
-    // Return just the messages array
-    res.status(200).json(workspace.messages);
+    // Phase 1: Security & Dispute Expansion
+    if (module === 'DealRoom') {
+      const deal = await Deal.findById(req.params.id).populate('proposals.senderId', 'name profilePictureUrl role');
+      if (!deal) return res.status(404).json({ message: 'Deal Room not found.' });
+      const logs = deal.proposals.map(p => ({
+        sender: p.senderId,
+        text: `PROPOSED VECTOR: $${p.amount || 0}\nMESSAGE: ${p.message}`,
+        timestamp: p.createdAt,
+        type: 'DealProposal'
+      }));
+      return res.status(200).json(logs);
+    } else {
+      // Default fallback for BarterWorkspace
+      const workspace = await BarterWorkspace.findById(req.params.id).populate('messages.sender', 'name profilePictureUrl role');
+      if (!workspace) return res.status(404).json({ message: 'Workspace not found.' });
+      return res.status(200).json(workspace.messages);
+    }
   } catch (error) {
     res.status(500).json({ message: 'Error fetching chat logs.' });
   }
@@ -251,6 +271,56 @@ router.post('/users/:id/warn', authMiddleware, verifyAdmin, async (req, res) => 
     res.status(200).json({ message: `Warning successfully transmitted to ${user.name}.` });
   } catch (error) {
     res.status(500).json({ message: 'Error issuing warning.' });
+  }
+});
+
+// --- ROUTE 13: THE VAULT QUARANTINE COMMAND ---
+router.post('/deals/:id/freeze', authMiddleware, verifyAdmin, async (req, res) => {
+  try {
+    const dealId = req.params.id;
+    const deal = await Deal.findById(dealId);
+    if (!deal) return res.status(404).json({ message: 'Deal Room not found.' });
+    if (deal.status === 'Frozen') return res.status(400).json({ message: 'This Vault is already in Quarantine.' });
+
+    deal.status = 'Frozen';
+    await deal.save();
+
+    const io = req.app.get('io');
+    if (io) io.emit('system_broadcast', `🚨 A Deal Room has been Quarantined by Platform Admin for investigation.`);
+
+    res.status(200).json({ message: 'Vault Quarantine successful. Room locked.', auditData: deal.documents });
+  } catch (error) {
+    res.status(500).json({ message: 'Critical error triggering Vault Quarantine.' });
+  }
+});
+
+// --- ROUTE 14: THE TRUST ORACLE (MANUAL BADGE INJECTION) ---
+router.post('/users/:id/badges', authMiddleware, verifyAdmin, async (req, res) => {
+  try {
+    const { badge } = req.body;
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+    
+    if (!user.trustBadges.includes(badge)) {
+      user.trustBadges.push(badge);
+      await user.save();
+    }
+    res.status(200).json({ message: `Oracle badge injected: ${badge}` });
+  } catch (error) {
+    res.status(500).json({ message: 'Error injecting badge.' });
+  }
+});
+
+// --- ROUTE 15: NEURAL OVERRIDE (GHOST LOGIN) ---
+router.post('/ghost-auth/:userId', authMiddleware, verifyAdmin, async (req, res) => {
+  try {
+    const targetUser = await User.findById(req.params.userId);
+    if (!targetUser) return res.status(404).json({ message: 'Target node not found.' });
+    
+    const token = jwt.sign({ userId: targetUser._id }, process.env.JWT_SECRET || 'fallback_secret', { expiresIn: '15m' });
+    res.status(200).json({ token, user: { id: targetUser._id, name: targetUser.name, role: targetUser.role, email: targetUser.email, username: targetUser.username } });
+  } catch (error) {
+    res.status(500).json({ message: 'Error initiating Neural Override.' });
   }
 });
 

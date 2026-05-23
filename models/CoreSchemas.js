@@ -91,7 +91,7 @@ const eventSchema = new mongoose.Schema({
 const dealSchema = new mongoose.Schema({
   title: { type: String, required: true },
   description: { type: String, required: true },
-  status: { type: String, enum: ['Open', 'Negotiating', 'Accepted', 'Closed'], default: 'Open' },
+  status: { type: String, enum: ['Open', 'Negotiating', 'Accepted', 'Closed', 'Frozen'], default: 'Open' },
   initiator: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   participants: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   documents: [{ type: String }], 
@@ -266,7 +266,7 @@ const wellnessLogSchema = new mongoose.Schema({
 const disputeSchema = new mongoose.Schema({
   reporter: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   reportedEntityId: { type: mongoose.Schema.Types.ObjectId, required: true }, // Can be a User, Workspace, or Post
-  module: { type: String, enum: ['SkillExchange', 'DealRoom', 'Mentorship', 'Events', 'Networking', 'Wellness'], required: true },
+  module: { type: String, enum: ['SkillExchange', 'DealRoom', 'Mentorship', 'Events', 'Networking', 'Wellness', 'Insights'], required: true },
   reason: { type: String, required: true },
   evidence: { type: String }, // Links to chat logs or screenshots
   status: { type: String, enum: ['Open', 'Reviewing', 'Resolved', 'Escalated'], default: 'Open' },
