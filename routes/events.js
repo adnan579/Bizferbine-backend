@@ -94,6 +94,7 @@ router.post('/:eventId/register', authMiddleware, async (req, res) => {
     // 1. Extract the Event ID from the URL and User ID from the secure token
     const eventId = req.params.eventId;
     const userId = req.user.userId;
+    const { paymentSuccess } = req.body; // Mocked Razorpay Payload
 
     // 2. Find the requested event in the database
     const event = await Event.findById(eventId);
@@ -187,4 +188,74 @@ router.post('/:eventId/sponsor', authMiddleware, async (req, res) => {
     res.status(500).json({ message: 'Server error during sponsorship registration.' });
   }
 });
+
+// --- ROUTE 5: ORGANIZER COMMAND CENTER (Fetch Attendees & Revenue) ---
+// URL: GET /api/events/:eventId/manage
+router.get('/:eventId/manage', authMiddleware, async (req, res) => {
+  try {
+    // 1. Fetch the event and populate the attendee profiles so the UI can show their names/faces
+    const event = await Event.findById(req.params.eventId)
+      .populate('registeredAttendees', 'name role profilePictureUrl');
+
+    if (!event) return res.status(404).json({ message: 'Event not found.' });
+
+    // 2. Security Check: Only the organizer can access this data!
+    if (event.organizerId.toString() !== req.user.userId) {
+      return res.status(403).json({ message: 'Access Denied: You are not the organizer of this event.' });
+    }
+
+    // 3. Calculate Escrow Revenue (Tickets + Sponsorships)
+    const revenue = (event.ticketPrice * event.registeredAttendees.length) + 
+                    (event.sponsorshipPrice * event.sponsors.length);
+
+    res.status(200).json({ 
+      event, 
+      attendees: event.registeredAttendees, 
+      revenue 
+    });
+  } catch (error) {
+    console.error('Command Center Error:', error);
+    res.status(500).json({ message: 'Server error loading Command Center.' });
+  }
+});
+
+// --- ROUTE 6: ORGANIZER BROADCAST (Ping all attendees) ---
+// URL: POST /api/events/:eventId/broadcast
+router.post('/:eventId/broadcast', authMiddleware, async (req, res) => {
+  try {
+    const { message } = req.body;
+    const event = await Event.findById(req.params.eventId);
+
+    if (!event) return res.status(404).json({ message: 'Event not found.' });
+
+    // Security Check
+    if (event.organizerId.toString() !== req.user.userId) {
+      return res.status(403).json({ message: 'Access Denied.' });
+    }
+
+    if (!message || message.trim() === '') {
+      return res.status(400).json({ message: 'Broadcast message cannot be empty.' });
+    }
+
+    // Prepare notifications for every single registered attendee
+    const notifications = event.registeredAttendees.map(attendeeId => ({
+      recipient: attendeeId,
+      sender: req.user.userId,
+      type: 'System', 
+      message: `EVENT UPDATE ("${event.title}"): ${message}`,
+      targetId: event._id
+    }));
+
+    // Mass insert for high performance
+    if (notifications.length > 0) {
+      await Notification.insertMany(notifications);
+    }
+
+    res.status(200).json({ message: 'Broadcast transmitted to all registered nodes.' });
+  } catch (error) {
+    console.error('Broadcast Error:', error);
+    res.status(500).json({ message: 'Server error transmitting broadcast.' });
+  }
+});
+
 module.exports = router;
