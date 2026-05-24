@@ -6,8 +6,9 @@ const { trackEvent } = require('../utils/analyticsHelper');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
-const { User, Insight, Event, BarterWorkspace, MentorshipSession, Deal, MentorReview, AnalyticsEvent } = require('../models/CoreSchemas');
+const { User, Insight, Event, BarterWorkspace, MentorshipSession, Deal, MentorReview, AnalyticsEvent, WellnessLog } = require('../models/CoreSchemas');
 const authMiddleware = require('../middleware/authMiddleware');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const router = express.Router();
 
@@ -275,9 +276,50 @@ router.get('/:userId', authMiddleware, async (req, res) => {
         }
     }
 
+    // --- TASK 2: ESCROW TVL ---
+    const activeDeals = await Deal.find({
+        status: 'Negotiating',
+        $or: [{ initiator: targetUserId }, { participants: targetUserId }]
+    });
+    
+    let dealEscrow = 0;
+    activeDeals.forEach(deal => {
+        if (deal.proposals && deal.proposals.length > 0) {
+            const latestAmount = deal.proposals[deal.proposals.length - 1].amount || 0;
+            dealEscrow += latestAmount;
+        }
+    });
+    
+    let eventEscrow = 0;
+    if (userEvents && userEvents.length > 0) {
+        userEvents.forEach(e => {
+            eventEscrow += (e.sponsorshipPrice || 0) * (e.sponsors?.length || 0);
+        });
+    }
+    const escrowTVL = dealEscrow + eventEscrow;
+
+    // --- TASK 3: ZERO-KNOWLEDGE STAMINA RING ---
+    const fourteenDaysAgo = new Date();
+    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+    const wellnessLogs = await WellnessLog.find({ user: targetUserId, createdAt: { $gte: fourteenDaysAgo } });
+    
+    let positiveCount = 0;
+    let negativeCount = 0;
+    wellnessLogs.forEach(log => {
+        if (['Excellent', 'Good'].includes(log.mood)) positiveCount++;
+        else if (['Stressed', 'Overwhelmed'].includes(log.mood)) negativeCount++;
+    });
+
+    let staminaStatus = 'Stable';
+    if (wellnessLogs.length > 0) {
+        if (positiveCount > wellnessLogs.length / 2) staminaStatus = 'Peak';
+        else if (negativeCount > wellnessLogs.length / 2) staminaStatus = 'Burnout';
+    }
+
     // Cap score at 99 for realism
     repScore = Math.min(Math.max(Math.floor(repScore), 10), 99);
 
+    // --- TASK 4: JSON RESPONSE PAYLOAD ---
     res.status(200).json({ 
         profile: userProfile,
         thoughtLeadershipFeed: recentInsights,
@@ -291,7 +333,9 @@ router.get('/:userId', authMiddleware, async (req, res) => {
         },
         verifiedExecution,
         verifiedSkills, // Add verified skills to the payload
-        mutualConnections
+        mutualConnections,
+        escrowTVL,
+        staminaStatus
     });
   } catch (error) {
     console.error('Fetch Profile Error:', error);
@@ -324,6 +368,34 @@ router.get('/:userId/heatmap', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Heatmap Error:', error);
     res.status(500).json({ message: 'Server error retrieving telemetry.' });
+  }
+});
+
+// --- ROUTE 7: SYNTHETIC NODE CHAT (AI TWIN) ---
+// URL: POST /api/profile/:userId/synthetic-chat
+router.post('/:userId/synthetic-chat', authMiddleware, async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    if (!prompt) return res.status(400).json({ message: 'Prompt is required.' });
+
+    const targetUser = await User.findById(req.params.userId);
+    if (!targetUser) return res.status(404).json({ message: 'User not found.' });
+
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({ message: 'Synthetic Node offline: Missing Gemini API Key.' });
+    }
+
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+    const systemInstruction = `You are the Synthetic Twin of ${targetUser.name}. Act strictly as them, responding in the first person. Base your answers entirely on this context:\nBio: ${targetUser.bio || 'Not provided'}\nSkills: ${targetUser.skills ? targetUser.skills.join(', ') : 'Not provided'}\nPortfolio: ${JSON.stringify(targetUser.portfolio || [])}\nIndustry: ${targetUser.industry || 'Not provided'}\nRole: ${targetUser.role}\nIf the user asks something outside this context, politely explain that you do not have that information in your current memory banks. Keep responses concise, professional, and slightly cyberpunk-themed.`;
+    const fullPrompt = `${systemInstruction}\n\nUser Message: ${prompt}`;
+
+    const result = await model.generateContent(fullPrompt);
+    res.status(200).json({ reply: result.response.text() });
+  } catch (error) {
+    console.error('Synthetic Node Error:', error);
+    res.status(500).json({ message: 'Synthetic Node encountered an error processing your request.' });
   }
 });
 
