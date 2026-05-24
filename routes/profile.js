@@ -386,7 +386,7 @@ router.post('/:userId/synthetic-chat', authMiddleware, async (req, res) => {
     }
 
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     const systemInstruction = `You are the Synthetic Twin of ${targetUser.name}. Act strictly as them, responding in the first person. Base your answers entirely on this context:\nBio: ${targetUser.bio || 'Not provided'}\nSkills: ${targetUser.skills ? targetUser.skills.join(', ') : 'Not provided'}\nPortfolio: ${JSON.stringify(targetUser.portfolio || [])}\nIndustry: ${targetUser.industry || 'Not provided'}\nRole: ${targetUser.role}\nIf the user asks something outside this context, politely explain that you do not have that information in your current memory banks. Keep responses concise, professional, and slightly cyberpunk-themed.`;
     const fullPrompt = `${systemInstruction}\n\nUser Message: ${prompt}`;
