@@ -38,6 +38,10 @@ const analyticsRoutes = require('./routes/analytics');
 // Initialize the Express application
 const app = express();
 
+// --- NEW: TRUST THE RENDER PROXY FOR RATE LIMITING ---
+app.set('trust proxy', 1);
+// -----------------------------------------------------
+
 // --- NEW: WEBSOCKET SERVER SETUP ---
 const server = http.createServer(app);
 const io = new Server(server, {
