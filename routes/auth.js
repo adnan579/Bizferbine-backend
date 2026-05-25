@@ -5,7 +5,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto'); // Built into Node.js
 const rateLimit = require('express-rate-limit');
 const { User } = require('../models/CoreSchemas');
-const { sendVerificationEmail } = require('../utils/emailHelper');
+const { sendVerificationEmail, sendPasswordResetEmail } = require('../utils/emailHelper');
 const { OAuth2Client } = require('google-auth-library');
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -128,7 +128,9 @@ router.post('/forgot-password', async (req, res) => {
 
     await user.save();
     
-    res.status(200).json({ message: 'Password recovery initiated.', token });
+    try { await sendPasswordResetEmail(user.email, user.name, token); } catch (err) { console.error("Email dispatch failed:", err); }
+
+    res.status(200).json({ message: 'Password recovery initiated.' });
   } catch (error) {
     res.status(500).json({ message: 'Server error during password recovery.' });
   }

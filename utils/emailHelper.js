@@ -47,4 +47,42 @@ const sendVerificationEmail = async (userEmail, userName, token) => {
   }
 };
 
-module.exports = { sendVerificationEmail };
+const sendPasswordResetEmail = async (userEmail, userName, token) => {
+  const resetUrl = `https://beta.setupgram.com/reset-password/${token}`;
+
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-w: 600px; margin: 0 auto; background-color: #050810; color: #fff; padding: 40px; border-radius: 10px; border: 1px solid #1e293b;">
+      <h2 style="color: #a855f7;">Password Reset Request</h2>
+      <p>Hello ${userName},</p>
+      <p>We received a request to reset the passphrase for your BizFerbine network node. Click the button below to establish new credentials.</p>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${resetUrl}" style="background-color: #a855f7; color: #fff; padding: 15px 30px; text-decoration: none; font-weight: bold; border-radius: 5px; text-transform: uppercase; letter-spacing: 2px;">Reset Passphrase</a>
+      </div>
+      <p style="color: #94a3b8; font-size: 12px;">If you did not request this, your node is secure and you can safely ignore this transmission. This link will expire in 1 hour.</p>
+    </div>
+  `;
+
+  try {
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'accept': 'application/json',
+        'api-key': process.env.BREVO_API_KEY,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        sender: { email: process.env.GMAIL_USER, name: 'BizFerbine Overseer' },
+        to: [{ email: userEmail }],
+        subject: 'BizFerbine - System Recovery Link',
+        htmlContent: htmlContent
+      })
+    });
+
+    if (!response.ok) console.error('Brevo API Error:', await response.json());
+    else console.log(`🚀 [HTTP Bypass] Password recovery email fired to ${userEmail}`);
+  } catch (error) {
+    console.error('Network error while sending email:', error);
+  }
+};
+
+module.exports = { sendVerificationEmail, sendPasswordResetEmail };
