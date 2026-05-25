@@ -318,7 +318,8 @@ router.post('/ghost-auth/:userId', authMiddleware, verifyAdmin, async (req, res)
     if (!targetUser) return res.status(404).json({ message: 'Target node not found.' });
     
     const token = jwt.sign({ userId: targetUser._id }, process.env.JWT_SECRET || 'fallback_secret', { expiresIn: '15m' });
-    res.status(200).json({ token, user: { id: targetUser._id, name: targetUser.name, role: targetUser.role, email: targetUser.email, username: targetUser.username } });
+    res.cookie('token', token, { httpOnly: true, secure: true, sameSite: 'none', maxAge: 15 * 60 * 1000 });
+    res.status(200).json({ user: { id: targetUser._id, name: targetUser.name, role: targetUser.role, email: targetUser.email, username: targetUser.username } });
   } catch (error) {
     res.status(500).json({ message: 'Error initiating Neural Override.' });
   }
