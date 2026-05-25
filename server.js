@@ -6,6 +6,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const http = require('http');
 const path = require('path'); // Moved to the top for best practices
+const cookieParser = require('cookie-parser');
 const { Server } = require('socket.io');
 
 // --- THE DNS BYPASS ---
@@ -73,8 +74,12 @@ io.on('connection', (socket) => {
 // -----------------------------------
 
 // Middleware
-app.use(cors());
+app.use(cors({ 
+  origin: ["https://beta.setupgram.com", "http://localhost:5173", "http://localhost:3000"], 
+  credentials: true 
+}));
 app.use(express.json());
+app.use(cookieParser());
 
 // Securely Serve the Uploads folder
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

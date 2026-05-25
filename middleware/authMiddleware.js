@@ -3,14 +3,12 @@ const { User } = require('../models/CoreSchemas'); // We need to pull the User d
 
 const authMiddleware = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const token = req.cookies.token;
+
+    if (!token) {
       return res.status(401).json({ message: 'Access Denied: No Token Provided.' });
     }
 
-    const token = authHeader.split(' ')[1];
-    
     // 1. Verify the token is mathematically valid
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_super_secret_key');
     req.user = decoded; // Attach the decoded payload to the request
