@@ -5,6 +5,7 @@ const multer = require('multer'); // Added for Document Sharing
 const { sendNotification } = require('../utils/notificationHelper');
 const { Deal } = require('../models/CoreSchemas');
 const authMiddleware = require('../middleware/authMiddleware'); 
+const governorMiddleware = require('../middleware/governorMiddleware');
 
 const router = express.Router();
 
@@ -42,7 +43,7 @@ router.post('/', authMiddleware, async (req, res) => {
 });
 
 // --- ROUTE 2: SUBMIT A PROPOSAL/MESSAGE ---
-router.post('/:dealId/proposals', authMiddleware, async (req, res) => {
+router.post('/:dealId/proposals', authMiddleware, governorMiddleware, async (req, res) => {
   try {
     const { message, amount } = req.body;
     const deal = await Deal.findById(req.params.dealId);
@@ -110,7 +111,7 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 // --- ROUTE 5: UPDATE DEAL STATUS ---
-router.put('/:dealId/status', authMiddleware, async (req, res) => {
+router.put('/:dealId/status', authMiddleware, governorMiddleware, async (req, res) => {
   try {
     const { status } = req.body; 
     const deal = await Deal.findById(req.params.dealId);

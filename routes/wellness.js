@@ -2,7 +2,35 @@
 const express = require('express');
 const { WellnessLog } = require('../models/CoreSchemas');
 const authMiddleware = require('../middleware/authMiddleware');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 const router = express.Router();
+
+// --- ROUTE 0: ANALYZE THOUGHT (Aegis Protocol Phase 2) ---
+router.post('/analyze-thought', authMiddleware, async (req, res) => {
+  try {
+    const { note } = req.body;
+    
+    if (!note || note.trim().length < 10) {
+      return res.status(200).json({ bypass: true });
+    }
+
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+      systemInstruction: "You are a clinical Cognitive Behavioral Therapy (CBT) analyzer. Read the user's note and determine if there are explicit 'Cognitive Distortions' (e.g., Catastrophizing, Black-and-White Thinking, Fortune Telling). Return your response strictly as a JSON object with the following structure: { \"hasDistortion\": boolean, \"distortionsDetected\": [\"list\", \"of\", \"distortions\"], \"socraticQuestion\": \"A single, challenging question asking the user to provide objective evidence against their negative thought.\" }. Do not include markdown formatting or backticks around the JSON."
+    });
+
+    const prompt = `Analyze this thought: "${note}"`;
+    const result = await model.generateContent(prompt);
+    const responseText = result.response.text().replace(/```json/gi, '').replace(/```/g, '').trim();
+    
+    const jsonResponse = JSON.parse(responseText);
+    res.status(200).json(jsonResponse);
+  } catch (error) {
+    console.error('Cognitive Compiler Error:', error);
+    res.status(200).json({ bypass: true });
+  }
+});
 
 // --- ROUTE 1: LOG MOOD & JOURNAL ---
 router.post('/log', authMiddleware, async (req, res) => {

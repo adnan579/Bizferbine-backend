@@ -128,9 +128,13 @@ router.post('/forgot-password', async (req, res) => {
 
     await user.save();
     
-    try { await sendPasswordResetEmail(user.email, user.name, token); } catch (err) { console.error("Email dispatch failed:", err); }
+    try {
+      await sendPasswordResetEmail(user.email, user.name, token);
+    } catch (emailErr) {
+      console.error("Email dispatch failed:", emailErr);
+    }
 
-    res.status(200).json({ message: 'Password recovery initiated.' });
+    res.status(200).json({ message: 'Password recovery initiated. Check your email.' });
   } catch (error) {
     res.status(500).json({ message: 'Server error during password recovery.' });
   }
