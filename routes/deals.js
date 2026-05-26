@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 const multer = require('multer'); // Added for Document Sharing
 const { sendNotification } = require('../utils/notificationHelper');
 const { Deal } = require('../models/CoreSchemas');
-const authMiddleware = require('../middleware/authMiddleware'); 
+const authMiddleware = require('../middleware/authMiddleware');
 const governorMiddleware = require('../middleware/governorMiddleware');
 
 const router = express.Router();
@@ -23,14 +23,14 @@ router.post('/', authMiddleware, async (req, res) => {
 
     // FIX: Strict Validation for the MongoDB User ID
     if (targetParticipantId && !mongoose.Types.ObjectId.isValid(targetParticipantId)) {
-        return res.status(400).json({ message: "Invalid User ID format. It must be a 24-character database ID." });
+      return res.status(400).json({ message: "Invalid User ID format. It must be a 24-character database ID." });
     }
 
     const newDeal = new Deal({
       title,
       description,
-      initiator: req.user.userId, 
-      participants: targetParticipantId ? [targetParticipantId] : [], 
+      initiator: req.user.userId,
+      participants: targetParticipantId ? [targetParticipantId] : [],
       documents: []
     });
 
@@ -74,26 +74,26 @@ router.post('/:dealId/proposals', authMiddleware, governorMiddleware, async (req
 });
 
 // --- ROUTE 3: UPLOAD A SECURE DOCUMENT ---
-router.post('/:dealId/documents', authMiddleware, upload.single('document'), async (req, res) => {
-    try {
-      const deal = await Deal.findById(req.params.dealId);
-      if (!deal) return res.status(404).json({ message: 'Deal not found.' });
-  
-      const isInitiator = deal.initiator.toString() === req.user.userId;
-      const isParticipant = deal.participants.includes(req.user.userId);
-      if (!isInitiator && !isParticipant) return res.status(403).json({ message: 'Access denied.' });
-      if (deal.status === 'Frozen' || deal.status === 'Closed') return res.status(400).json({ message: 'This Deal Room is locked.' });
-  
-      if (!req.file) return res.status(400).json({ message: 'No document provided.' });
-  
-      // Push the document path to the deal's documents array
-      deal.documents.push(req.file.path);
-      await deal.save();
-  
-      res.status(200).json({ message: 'Secure document uploaded!', deal });
-    } catch (error) {
-      res.status(500).json({ message: 'Server error uploading document.' });
-    }
+router.post('/:dealId/documents', authMiddleware, governorMiddleware, upload.single('document'), async (req, res) => {
+  try {
+    const deal = await Deal.findById(req.params.dealId);
+    if (!deal) return res.status(404).json({ message: 'Deal not found.' });
+
+    const isInitiator = deal.initiator.toString() === req.user.userId;
+    const isParticipant = deal.participants.includes(req.user.userId);
+    if (!isInitiator && !isParticipant) return res.status(403).json({ message: 'Access denied.' });
+    if (deal.status === 'Frozen' || deal.status === 'Closed') return res.status(400).json({ message: 'This Deal Room is locked.' });
+
+    if (!req.file) return res.status(400).json({ message: 'No document provided.' });
+
+    // Push the document path to the deal's documents array
+    deal.documents.push(req.file.path);
+    await deal.save();
+
+    res.status(200).json({ message: 'Secure document uploaded!', deal });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error uploading document.' });
+  }
 });
 
 // --- ROUTE 4: GET ALL DEALS ---
@@ -102,7 +102,7 @@ router.get('/', authMiddleware, async (req, res) => {
     const userId = req.user.userId;
     const userDeals = await Deal.find({
       $or: [{ initiator: userId }, { participants: userId }]
-    }).sort({ updatedAt: -1 }); 
+    }).sort({ updatedAt: -1 });
 
     res.status(200).json(userDeals);
   } catch (error) {
@@ -113,7 +113,7 @@ router.get('/', authMiddleware, async (req, res) => {
 // --- ROUTE 5: UPDATE DEAL STATUS ---
 router.put('/:dealId/status', authMiddleware, governorMiddleware, async (req, res) => {
   try {
-    const { status } = req.body; 
+    const { status } = req.body;
     const deal = await Deal.findById(req.params.dealId);
     if (!deal) return res.status(404).json({ message: 'Deal not found.' });
 
@@ -132,20 +132,20 @@ router.put('/:dealId/status', authMiddleware, governorMiddleware, async (req, re
 
 // --- ROUTE 6: DELETE A DEAL ROOM ---
 router.delete('/:dealId', authMiddleware, async (req, res) => {
-    try {
-      const deal = await Deal.findById(req.params.dealId);
-      if (!deal) return res.status(404).json({ message: 'Deal not found.' });
-  
-      // Security: Only the initiator (creator) can delete the room!
-      if (deal.initiator.toString() !== req.user.userId) {
-        return res.status(403).json({ message: 'Only the creator of the deal room can delete it.' });
-      }
-  
-      await Deal.findByIdAndDelete(req.params.dealId);
-      res.status(200).json({ message: 'Secure Deal Room permanently destroyed.' });
-    } catch (error) {
-      res.status(500).json({ message: 'Server error deleting deal.' });
+  try {
+    const deal = await Deal.findById(req.params.dealId);
+    if (!deal) return res.status(404).json({ message: 'Deal not found.' });
+
+    // Security: Only the initiator (creator) can delete the room!
+    if (deal.initiator.toString() !== req.user.userId) {
+      return res.status(403).json({ message: 'Only the creator of the deal room can delete it.' });
     }
+
+    await Deal.findByIdAndDelete(req.params.dealId);
+    res.status(200).json({ message: 'Secure Deal Room permanently destroyed.' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error deleting deal.' });
+  }
 });
 
 module.exports = router;
