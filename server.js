@@ -15,7 +15,7 @@ dns.setServers(['8.8.8.8', '8.8.4.4']);
 // ----------------------
 
 // 1. IMPORT ALL ROUTES CLEANLY
-const authRoutes = require('./routes/auth'); 
+const authRoutes = require('./routes/auth');
 const profileRoutes = require('./routes/profile');
 const eventRoutes = require('./routes/events');
 const dealRoutes = require('./routes/deals');
@@ -27,13 +27,14 @@ const insightRoutes = require('./routes/insights');
 const mentorshipBoardRoutes = require('./routes/mentorshipBoard');
 const paymentRoutes = require('./routes/payments');
 const skillExchangeRoutes = require('./routes/skillExchange');
-const notificationRoutes = require('./routes/notifications'); 
+const notificationRoutes = require('./routes/notifications');
 const searchRoutes = require('./routes/search');
-const barterWorkspaceRoutes = require('./routes/barterWorkspace'); 
-const wellnessRoutes = require('./routes/wellness'); 
-const adminRoutes = require('./routes/admin'); 
-const disputesRoutes = require('./routes/disputes'); 
-const analyticsRoutes = require('./routes/analytics'); 
+const barterWorkspaceRoutes = require('./routes/barterWorkspace');
+const wellnessRoutes = require('./routes/wellness');
+const adminRoutes = require('./routes/admin');
+const disputesRoutes = require('./routes/disputes');
+const analyticsRoutes = require('./routes/analytics');
+const executionRoutes = require('./routes/execution');
 
 // Initialize the Express application
 const app = express();
@@ -47,7 +48,7 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     // Array allows BOTH your live site and local testing to connect!
-    origin: ["https://beta.setupgram.com", "http://localhost:5173", "http://localhost:3000"], 
+    origin: ["https://beta.setupgram.com", "http://localhost:5173", "http://localhost:3000"],
     methods: ["GET", "POST", "PUT", "DELETE"]
   }
 });
@@ -78,9 +79,9 @@ io.on('connection', (socket) => {
 // -----------------------------------
 
 // Middleware
-app.use(cors({ 
-  origin: ["https://beta.setupgram.com", "http://localhost:5173", "http://localhost:3000"], 
-  credentials: true 
+app.use(cors({
+  origin: ["https://beta.setupgram.com", "http://localhost:5173", "http://localhost:3000"],
+  credentials: true
 }));
 app.use(express.json());
 app.use(cookieParser());
@@ -108,15 +109,16 @@ app.use('/api/network', networkRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/insights', insightRoutes);
 app.use('/api/mentorship-board', mentorshipBoardRoutes);
-app.use('/api/payments', paymentRoutes); 
+app.use('/api/payments', paymentRoutes);
 app.use('/api/skill-exchange', skillExchangeRoutes);
-app.use('/api/notifications', notificationRoutes); 
-app.use('/api/search', searchRoutes); 
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/search', searchRoutes);
 app.use('/api/barter-workspace', barterWorkspaceRoutes);
 app.use('/api/wellness', wellnessRoutes);
-app.use('/api/admin', adminRoutes); 
-app.use('/api/disputes', disputesRoutes); 
-app.use('/api/analytics', analyticsRoutes); 
+app.use('/api/admin', adminRoutes);
+app.use('/api/disputes', disputesRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/execution', executionRoutes);
 
 // Basic Test Route
 app.get('/', (req, res) => {

@@ -2,7 +2,7 @@
 const express = require('express');
 const { Event, User, Notification } = require('../models/CoreSchemas');
 const authMiddleware = require('../middleware/authMiddleware'); // Our security guard
-const { compileMissionBrief } = require('../utils/matchmakingEngine');
+const { matchmakingQueue } = require('../utils/queueEngine');
 
 const router = express.Router();
 
@@ -274,10 +274,8 @@ router.post('/:eventId/register-intent', authMiddleware, async (req, res) => {
     });
     await newReg.save();
 
-    // Trigger background mission brief compilation instantly
-    compileMissionBrief(req.params.eventId, req.user.userId).catch(err =>
-      console.error("Background matchmaking execution failure:", err)
-    );
+    // Trigger background mission brief compilation via Redis Queue
+    await matchmakingQueue.add('compileBrief', { eventId: req.params.eventId, userId: req.user.userId });
 
     await EventOutcome.findOneAndUpdate({ event: req.params.eventId }, { $inc: { registrationsCount: 1 } }, { upsert: true });
     res.status(201).json({ message: 'Intent profile registered successfully.', registration: newReg });
@@ -291,6 +289,40 @@ router.get('/:eventId/operating-system', authMiddleware, async (req, res) => {
     const attendees = await EventRegistration.find({ event: req.params.eventId }).populate('user', 'name role headline skills');
     res.status(200).json({ sessions, attendees });
   } catch (err) { res.status(500).json({ message: 'Failed to stream operating system data.' }); }
+});
+
+// ROUTE C: Stream Live Event Social Pulse Feed (Vector 1 & Vector 4 Integration)
+router.get('/:eventId/pulse', authMiddleware, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+
+    // Fetch outcomes telemetry
+    let outcomes = await EventOutcome.findOne({ event: eventId });
+    if (!outcomes) {
+      outcomes = { registrationsCount: 0, actualAttendanceCount: 0, connectionsTriggered: 0, workspacesSpawned: 0 };
+    }
+
+    // Fetch recent registration pings for the "Who Joined Recently" ticker
+    const recentRegistrations = await EventRegistration.find({ event: eventId })
+      .sort({ createdAt: -1 })
+      .limit(3)
+      .populate('user', 'name role profilePictureUrl');
+
+    res.status(200).json({
+      pulse: {
+        activeNetworkingCount: outcomes.registrationsCount + 3, // Simulated live threshold
+        workspacesCreatedToday: outcomes.workspacesSpawned,
+        connectionsFormed: outcomes.connectionsTriggered,
+        recentJoiners: recentRegistrations.map(r => ({
+          name: r.user?.name || 'Anonymous Founder',
+          role: r.user?.role || 'Builder',
+          pic: r.user?.profilePictureUrl || ''
+        }))
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Error streaming ecosystem telemetry pulse.' });
+  }
 });
 
 module.exports = router;

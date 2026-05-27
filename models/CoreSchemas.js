@@ -90,8 +90,33 @@ const eventSchema = new mongoose.Schema({
   registeredAttendees: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   acceptsSponsors: { type: Boolean, default: false },
   sponsorshipPrice: { type: Number, default: 0 },
-  sponsors: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
+  sponsors: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  status: { type: String, enum: ['DRAFT', 'SCHEDULED', 'OPEN', 'LIVE', 'COOLDOWN', 'ENDED', 'ARCHIVED'], default: 'SCHEDULED', index: true }
 }, { timestamps: true });
+
+eventSchema.statics.transitionState = async function (eventId, targetState) {
+  const validTransitions = {
+    'DRAFT': ['SCHEDULED'],
+    'SCHEDULED': ['OPEN', 'DRAFT'],
+    'OPEN': ['LIVE', 'SCHEDULED'],
+    'LIVE': ['COOLDOWN', 'ENDED'],
+    'COOLDOWN': ['ENDED'],
+    'ENDED': ['ARCHIVED'],
+    'ARCHIVED': []
+  };
+
+  const event = await this.findById(eventId);
+  if (!event) throw new Error('Event not found');
+
+  const allowedNextStates = validTransitions[event.status] || [];
+  if (!allowedNextStates.includes(targetState)) {
+    throw new Error(`State Machine Error: Cannot transition from ${event.status} to ${targetState}`);
+  }
+
+  event.status = targetState;
+  await event.save();
+  return event;
+};
 
 // --- DEAL ROOM SCHEMA ---
 const dealSchema = new mongoose.Schema({
@@ -387,11 +412,92 @@ const eventReputationSchema = new mongoose.Schema({
   outcomeScore: { type: Number, default: 0 }
 }, { timestamps: true });
 
+// High-Velocity Database Indexing Passes
+eventRegistrationSchema.index({ event: 1, user: 1 }, { unique: true });
+eventRegistrationSchema.index({ createdAt: -1 });
+eventConnectionSchema.index({ event: 1, status: 1 });
+
 const EventRegistration = mongoose.model('EventRegistration', eventRegistrationSchema);
 const EventConnection = mongoose.model('EventConnection', eventConnectionSchema);
 const EventSession = mongoose.model('EventSession', eventSessionSchema);
 const EventOutcome = mongoose.model('EventOutcome', eventOutcomeSchema);
 const EventReputation = mongoose.model('EventReputation', eventReputationSchema);
+
+// --- SEQUENCE: MEMORY & RELATIONSHIP GRAPH (PHASE 3, 4, 5) ---
+
+// 1. Execution Intent (Replaces "Connect")
+const executionIntentSchema = new mongoose.Schema({
+  initiator: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  target: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  eventContext: { type: mongoose.Schema.Types.ObjectId, ref: 'Event' },
+  intentType: { type: String, enum: ['Start Project', 'Create Deal Room', 'Request Advisor', 'Build Sprint', 'Offer Partnership'], required: true },
+  status: { type: String, enum: ['Proposed', 'Accepted', 'Declined', 'Converted_To_Workspace'], default: 'Proposed' },
+  message: { type: String, maxLength: 500 }
+}, { timestamps: true });
+
+// 2. Workspace Engine (The Execution Pipeline)
+const workspaceSchema = new mongoose.Schema({
+  title: { type: String, required: true },
+  sourceIntent: { type: mongoose.Schema.Types.ObjectId, ref: 'ExecutionIntent' },
+  status: { type: String, enum: ['Active', 'Completed', 'Archived'], default: 'Active' },
+  outcomesGenerated: [{ type: String }]
+}, { timestamps: true });
+
+const workspaceMemberSchema = new mongoose.Schema({
+  workspace: { type: mongoose.Schema.Types.ObjectId, ref: 'Workspace', required: true, index: true },
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  role: { type: String, default: 'Collaborator' }
+}, { timestamps: true });
+
+const workspaceMilestoneSchema = new mongoose.Schema({
+  workspace: { type: mongoose.Schema.Types.ObjectId, ref: 'Workspace', required: true, index: true },
+  title: { type: String, required: true },
+  status: { type: String, enum: ['Pending', 'In Progress', 'Completed'], default: 'Pending' },
+  completedAt: { type: Date }
+}, { timestamps: true });
+
+// 3. Sponsor Participation Layer
+const sponsorActionSchema = new mongoose.Schema({
+  event: { type: mongoose.Schema.Types.ObjectId, ref: 'Event', required: true, index: true },
+  sponsor: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  capabilities: { type: String, enum: ['Office Hours', 'Challenges', 'Talent Discovery', 'Grant Programs', 'AMAs'], required: true },
+  details: { type: mongoose.Schema.Types.Mixed }
+}, { timestamps: true });
+
+// 4. The Moat: Relationship Graph & Momentum
+const relationshipEdgeSchema = new mongoose.Schema({
+  sourceUser: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  targetUser: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  type: { type: String, enum: ['Met', 'Mentored', 'Collaborated', 'Invested', 'WorkedTogether'], required: true },
+  strength: { type: Number, default: 1 },
+  lastInteraction: { type: Date, default: Date.now }
+}, { timestamps: true });
+
+const userMomentumSchema = new mongoose.Schema({
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true, index: true },
+  responsiveness: { type: Number, default: 50 },
+  followThrough: { type: Number, default: 50 },
+  execution: { type: Number, default: 0 },
+  participation: { type: Number, default: 0 },
+  trend: { type: String, enum: ['Accelerating', 'Stable', 'Decelerating'], default: 'Stable' }
+}, { timestamps: true });
+
+const economicIndexSchema = new mongoose.Schema({
+  metricType: { type: String, enum: ['Projects Started', 'Deals Closed', 'Mentorship Hours', 'Jobs Created', 'Capital Introduced'], required: true },
+  value: { type: Number, default: 1 },
+  eventSource: { type: mongoose.Schema.Types.ObjectId, ref: 'Event' },
+  participants: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
+}, { timestamps: true });
+
+// Compile Models
+const ExecutionIntent = mongoose.model('ExecutionIntent', executionIntentSchema);
+const Workspace = mongoose.model('Workspace', workspaceSchema);
+const WorkspaceMember = mongoose.model('WorkspaceMember', workspaceMemberSchema);
+const WorkspaceMilestone = mongoose.model('WorkspaceMilestone', workspaceMilestoneSchema);
+const SponsorAction = mongoose.model('SponsorAction', sponsorActionSchema);
+const RelationshipEdge = mongoose.model('RelationshipEdge', relationshipEdgeSchema);
+const UserMomentum = mongoose.model('UserMomentum', userMomentumSchema);
+const EconomicIndex = mongoose.model('EconomicIndex', economicIndexSchema);
 
 // UPDATE YOUR EXPORTS TO INCLUDE BarterWorkspace
 // Export all models
@@ -399,5 +505,7 @@ module.exports = {
   User, Event, Deal, Mentorship, Connection, Message, Insight, MentorshipApplication,
   SkillExchange, Notification, BarterWorkspace, WellnessLog,
   Dispute, MentorshipSession, MentorReview, AnalyticsEvent, AnalyticsSummary,
-  EventRegistration, EventConnection, EventSession, EventOutcome, EventReputation
+  EventRegistration, EventConnection, EventSession, EventOutcome, EventReputation,
+  RelationshipEdge, ExecutionIntent, Workspace, WorkspaceMember, WorkspaceMilestone,
+  SponsorAction, UserMomentum, EconomicIndex
 };
