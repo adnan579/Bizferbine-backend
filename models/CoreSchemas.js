@@ -18,7 +18,7 @@ const userSchema = new mongoose.Schema({
   // -------------------------------------------
   followers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   following: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-  
+
   // 1. Dynamic Identity & Branding
   headline: { type: String, maxLength: 150 }, // Smart Headline (Value Prop)
   bio: { type: String, maxLength: 1000 }, // Keyword-Rich "About" Section
@@ -29,7 +29,7 @@ const userSchema = new mongoose.Schema({
   profilePictureUrl: { type: String },
   profileBannerUrl: { type: String }, // Custom Banner
   pitchVideoUrl: { type: String }, // NEW: The Asynchronous Elevator Pitch
-  location: { type: String }, 
+  location: { type: String },
   socialLinks: {
     linkedIn: { type: String },
     github: { type: String },
@@ -37,7 +37,7 @@ const userSchema = new mongoose.Schema({
   },
 
   // 2. Algorithmic Optimization (Skill Matrix)
-  skills: [{ type: String }], 
+  skills: [{ type: String }],
 
   // 3. High-Impact Portfolio Section (Case Studies)
   portfolio: [{
@@ -85,12 +85,12 @@ const eventSchema = new mongoose.Schema({
   locationOrLink: { type: String, required: true },
   date: { type: Date, required: true },
   organizerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  ticketPrice: { type: Number, default: 0 }, 
+  ticketPrice: { type: Number, default: 0 },
   maxCapacity: { type: Number, required: true },
-  registeredAttendees: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], 
+  registeredAttendees: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   acceptsSponsors: { type: Boolean, default: false },
   sponsorshipPrice: { type: Number, default: 0 },
-  sponsors: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }] 
+  sponsors: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
 }, { timestamps: true });
 
 // --- DEAL ROOM SCHEMA ---
@@ -100,7 +100,7 @@ const dealSchema = new mongoose.Schema({
   status: { type: String, enum: ['Open', 'Negotiating', 'Accepted', 'Closed', 'Frozen'], default: 'Open' },
   initiator: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   participants: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-  documents: [{ type: String }], 
+  documents: [{ type: String }],
   proposals: [{
     senderId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     message: { type: String, required: true },
@@ -127,14 +127,14 @@ const mentorshipSessionSchema = new mongoose.Schema({
   scheduledAt: { type: Date, required: true },
   status: { type: String, enum: ['Scheduled', 'Completed', 'Canceled', 'No-Show'], default: 'Scheduled' },
   meetingLink: { type: String }, // Zoom/Google Meet link
-  
+
   // Workspace Data
   sharedNotes: { type: String },
   actionItems: [{
     task: { type: String },
     isCompleted: { type: Boolean, default: false }
   }],
-  
+
   // Post-Session Evaluation
   menteeFeedback: { type: String },
   mentorFeedback: { type: String }
@@ -164,24 +164,24 @@ const messageSchema = new mongoose.Schema({
   sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   recipient: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   content: { type: String, required: true },
-  isRead: { type: Boolean, default: false } 
+  isRead: { type: Boolean, default: false }
 }, { timestamps: true });
 
 // --- INDUSTRY INSIGHTS SCHEMA ---
 const insightSchema = new mongoose.Schema({
   author: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   title: { type: String, required: true },
-  content: { 
-    type: String, 
+  content: {
+    type: String,
     required: true,
     validate: {
-      validator: function(text) { return text.trim().split(/\s+/).length <= 120; },
+      validator: function (text) { return text.trim().split(/\s+/).length <= 120; },
       message: 'Insight content cannot exceed 120 words.'
     }
   },
-  tags: [{ type: String }], 
-  imageUrl: { type: String }, 
-  likes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], 
+  tags: [{ type: String }],
+  imageUrl: { type: String },
+  likes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   comments: [{
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     text: { type: String, required: true },
@@ -202,7 +202,7 @@ const mentorshipApplicationSchema = new mongoose.Schema({
     message: { type: String, required: true },
     createdAt: { type: Date, default: Date.now }
   }],
-  matchedMentor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' } 
+  matchedMentor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
 }, { timestamps: true });
 
 // --- NEW: SKILL EXCHANGE SCHEMA ---
@@ -211,7 +211,7 @@ const skillExchangeSchema = new mongoose.Schema({
   title: { type: String, required: true },
   description: { type: String, required: true },
   // Arrays to hold the specific skills for the barter!
-  offeredSkills: [{ type: String, required: true }], 
+  offeredSkills: [{ type: String, required: true }],
   requiredSkills: [{ type: String, required: true }],
   status: { type: String, enum: ['Active', 'Closed'], default: 'Active' },
   proposals: [{
@@ -224,17 +224,17 @@ const skillExchangeSchema = new mongoose.Schema({
 // --- NOTIFICATION SCHEMA ---
 const notificationSchema = new mongoose.Schema({
   recipient: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, 
-  type: { 
-    type: String, 
+  sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  type: {
+    type: String,
     // We are adding new types here for Deal Rooms and Insights!
-    enum: ['MentorshipOffer', 'SkillProposal', 'NewFollower', 'Testimonial', 'DealRoomUpdate', 'InsightInteraction', 'System', 'NewReview', 
-      'BarterProposal', 'BarterUpdate', 'ConnectionRequest', 'ConnectionAccepted'], 
-    required: true 
+    enum: ['MentorshipOffer', 'SkillProposal', 'NewFollower', 'Testimonial', 'DealRoomUpdate', 'InsightInteraction', 'System', 'NewReview',
+      'BarterProposal', 'BarterUpdate', 'ConnectionRequest', 'ConnectionAccepted'],
+    required: true
   },
-  message: { type: String, required: true }, 
-  targetId: { type: mongoose.Schema.Types.ObjectId }, 
-  isRead: { type: Boolean, default: false } 
+  message: { type: String, required: true },
+  targetId: { type: mongoose.Schema.Types.ObjectId },
+  isRead: { type: Boolean, default: false }
 }, { timestamps: true });
 
 // --- ACTIVE BARTER WORKSPACE SCHEMA ---
@@ -292,15 +292,15 @@ const analyticsEventSchema = new mongoose.Schema({
   eventType: {
     type: String,
     enum: [
-      'PROFILE_VIEW', 
-      'PORTFOLIO_CLICK', 
-      'FOLLOW', 
-      'MENTORSHIP_REQUEST', 
+      'PROFILE_VIEW',
+      'PORTFOLIO_CLICK',
+      'FOLLOW',
+      'MENTORSHIP_REQUEST',
       'MENTORSHIP_ACCEPTED',
-      'REVIEW_RECEIVED', 
-      'INSIGHT_VIEW', 
-      'CASE_STUDY_VIEW', 
-      'GITHUB_CLICK', 
+      'REVIEW_RECEIVED',
+      'INSIGHT_VIEW',
+      'CASE_STUDY_VIEW',
+      'GITHUB_CLICK',
       'WEBSITE_CLICK',
       'LINKEDIN_CLICK'
     ],
@@ -330,8 +330,8 @@ const Event = mongoose.model('Event', eventSchema);
 const Deal = mongoose.model('Deal', dealSchema);
 const Mentorship = mongoose.model('Mentorship', mentorshipSchema);
 const Connection = mongoose.model('Connection', connectionSchema);
-const Message = mongoose.model('Message', messageSchema); 
-const Insight = mongoose.model('Insight', insightSchema); 
+const Message = mongoose.model('Message', messageSchema);
+const Insight = mongoose.model('Insight', insightSchema);
 const MentorshipApplication = mongoose.model('MentorshipApplication', mentorshipApplicationSchema);
 const SkillExchange = mongoose.model('SkillExchange', skillExchangeSchema); // New!
 const Notification = mongoose.model('Notification', notificationSchema);
@@ -343,9 +343,61 @@ const MentorReview = mongoose.model('MentorReview', mentorReviewSchema);
 const AnalyticsEvent = mongoose.model('AnalyticsEvent', analyticsEventSchema);
 const AnalyticsSummary = mongoose.model('AnalyticsSummary', analyticsSummarySchema);
 
+// --- NEW: ALGORITHMIC EVENT SYSTEM SCHEMAS ---
+const eventRegistrationSchema = new mongoose.Schema({
+  event: { type: mongoose.Schema.Types.ObjectId, ref: 'Event', required: true, index: true },
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  attendingPurpose: { type: String, enum: ['Customers', 'Mentor', 'Co-founder', 'Funding', 'Hiring'], required: true },
+  specificLookingFor: { type: String, maxLength: 500 },
+  weekendAvailabilityOnly: { type: Boolean, default: false },
+  earlyStageFocus: { type: Boolean, default: true },
+  geographicRegion: { type: String, required: true },
+  missionBriefGenerated: { type: Boolean, default: false },
+  briefData: { type: mongoose.Schema.Types.Mixed }
+}, { timestamps: true });
+
+const eventConnectionSchema = new mongoose.Schema({
+  event: { type: mongoose.Schema.Types.ObjectId, ref: 'Event', required: true, index: true },
+  requester: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  recipient: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  status: { type: String, enum: ['Pending_Intro', 'Booked_15Min', 'Workspace_Created', 'Ignored'], default: 'Pending_Intro' }
+}, { timestamps: true });
+
+const eventSessionSchema = new mongoose.Schema({
+  event: { type: mongoose.Schema.Types.ObjectId, ref: 'Event', required: true, index: true },
+  title: { type: String, required: true },
+  roomName: { type: String, required: true },
+  startTime: { type: Date, required: true },
+  endTime: { type: Date, required: true },
+  deliverables: [{ type: String }]
+}, { timestamps: true });
+
+const eventOutcomeSchema = new mongoose.Schema({
+  event: { type: mongoose.Schema.Types.ObjectId, ref: 'Event', required: true, unique: true, index: true },
+  registrationsCount: { type: Number, default: 0 },
+  actualAttendanceCount: { type: Number, default: 0 },
+  connectionsTriggered: { type: Number, default: 0 },
+  workspacesSpawned: { type: Number, default: 0 }
+}, { timestamps: true });
+
+const eventReputationSchema = new mongoose.Schema({
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  presenceScore: { type: Number, default: 0 },
+  contributionScore: { type: Number, default: 0 },
+  outcomeScore: { type: Number, default: 0 }
+}, { timestamps: true });
+
+const EventRegistration = mongoose.model('EventRegistration', eventRegistrationSchema);
+const EventConnection = mongoose.model('EventConnection', eventConnectionSchema);
+const EventSession = mongoose.model('EventSession', eventSessionSchema);
+const EventOutcome = mongoose.model('EventOutcome', eventOutcomeSchema);
+const EventReputation = mongoose.model('EventReputation', eventReputationSchema);
 
 // UPDATE YOUR EXPORTS TO INCLUDE BarterWorkspace
 // Export all models
-module.exports = { User, Event, Deal, Mentorship, Connection, Message, Insight, MentorshipApplication, 
-  SkillExchange, Notification, BarterWorkspace, WellnessLog, 
-  Dispute, MentorshipSession, MentorReview, AnalyticsEvent, AnalyticsSummary };
+module.exports = {
+  User, Event, Deal, Mentorship, Connection, Message, Insight, MentorshipApplication,
+  SkillExchange, Notification, BarterWorkspace, WellnessLog,
+  Dispute, MentorshipSession, MentorReview, AnalyticsEvent, AnalyticsSummary,
+  EventRegistration, EventConnection, EventSession, EventOutcome, EventReputation
+};

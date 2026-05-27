@@ -1,7 +1,8 @@
 // routes/events.js
 const express = require('express');
-const { Event, User, Notification } = require('../models/CoreSchemas'); 
+const { Event, User, Notification } = require('../models/CoreSchemas');
 const authMiddleware = require('../middleware/authMiddleware'); // Our security guard
+const { compileMissionBrief } = require('../utils/matchmakingEngine');
 
 const router = express.Router();
 
@@ -10,9 +11,9 @@ const router = express.Router();
 router.post('/', authMiddleware, async (req, res) => {
   try {
     // 1. Extract all the advanced data from the request
-    const { 
-      title, description, type, locationOrLink, date, 
-      ticketPrice, maxCapacity, acceptsSponsors, sponsorshipPrice 
+    const {
+      title, description, type, locationOrLink, date,
+      ticketPrice, maxCapacity, acceptsSponsors, sponsorshipPrice
     } = req.body;
 
     // 2. Create the event, pulling the organizer's ID straight from their secure token
@@ -35,7 +36,7 @@ router.post('/', authMiddleware, async (req, res) => {
     // --- PHASE 3: ALGORITHMIC AUDIENCE INJECTION (The Traffic Trigger) ---
     // Extract simple keywords from the title to find matching skills
     const keywords = title.toLowerCase().split(/\s+/);
-    
+
     // Find users whose skills match these keywords, excluding the organizer
     const matchingUsers = await User.find({
       skills: { $in: keywords.map(k => new RegExp(k, 'i')) },
@@ -66,14 +67,14 @@ router.post('/', authMiddleware, async (req, res) => {
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const events = await Event.find().sort({ date: 1 });
-    
+
     // PHASE 1: Gatekeeping. Strip the locationOrLink if the user hasn't registered/paid.
     const secureEvents = events.map(e => {
       const eventObj = e.toObject();
       const isOrganizer = eventObj.organizerId.toString() === req.user.userId;
       const isRegistered = eventObj.registeredAttendees.map(id => id.toString()).includes(req.user.userId);
       const isSponsor = eventObj.sponsors.map(id => id.toString()).includes(req.user.userId);
-      
+
       if (!isOrganizer && !isRegistered && !isSponsor) {
         eventObj.locationOrLink = '🔒 Secure Link (Hidden until Registration)';
       }
@@ -98,7 +99,7 @@ router.post('/:eventId/register', authMiddleware, async (req, res) => {
 
     // 2. Find the requested event in the database
     const event = await Event.findById(eventId);
-    
+
     if (!event) {
       return res.status(404).json({ message: 'Event not found.' });
     }
@@ -117,10 +118,10 @@ router.post('/:eventId/register', authMiddleware, async (req, res) => {
     // PHASE 1: Razorpay Integration Hook
     if (event.ticketPrice > 0 && !paymentSuccess) {
       // In production, this would initialize razorpay.orders.create() and return the orderId
-      return res.status(200).json({ 
-        requiresPayment: true, 
+      return res.status(200).json({
+        requiresPayment: true,
         amount: event.ticketPrice,
-        message: 'Redirecting to secure Razorpay checkout...' 
+        message: 'Redirecting to secure Razorpay checkout...'
       });
     }
 
@@ -128,9 +129,9 @@ router.post('/:eventId/register', authMiddleware, async (req, res) => {
     event.registeredAttendees.push(userId);
     await event.save();
 
-    res.status(200).json({ 
-      message: 'Successfully registered for the event!', 
-      event 
+    res.status(200).json({
+      message: 'Successfully registered for the event!',
+      event
     });
 
   } catch (error) {
@@ -149,7 +150,7 @@ router.post('/:eventId/sponsor', authMiddleware, async (req, res) => {
 
     // 1. Find the event
     const event = await Event.findById(eventId);
-    
+
     if (!event) {
       return res.status(404).json({ message: 'Event not found.' });
     }
@@ -167,10 +168,10 @@ router.post('/:eventId/sponsor', authMiddleware, async (req, res) => {
     // PHASE 1 & 4: High-Ticket Sponsorship Escrow
     if (event.sponsorshipPrice > 0 && !paymentSuccess) {
       // In production, this would route funds to an escrow account via Stripe Connect / Razorpay Route
-      return res.status(200).json({ 
-        requiresPayment: true, 
+      return res.status(200).json({
+        requiresPayment: true,
         amount: event.sponsorshipPrice,
-        message: 'Initializing Escrow payment. Funds will be released to organizer post-event.' 
+        message: 'Initializing Escrow payment. Funds will be released to organizer post-event.'
       });
     }
 
@@ -178,9 +179,9 @@ router.post('/:eventId/sponsor', authMiddleware, async (req, res) => {
     event.sponsors.push(userId);
     await event.save();
 
-    res.status(200).json({ 
-      message: 'Successfully registered as an event sponsor!', 
-      event 
+    res.status(200).json({
+      message: 'Successfully registered as an event sponsor!',
+      event
     });
 
   } catch (error) {
@@ -205,13 +206,13 @@ router.get('/:eventId/manage', authMiddleware, async (req, res) => {
     }
 
     // 3. Calculate Escrow Revenue (Tickets + Sponsorships)
-    const revenue = (event.ticketPrice * event.registeredAttendees.length) + 
-                    (event.sponsorshipPrice * event.sponsors.length);
+    const revenue = (event.ticketPrice * event.registeredAttendees.length) +
+      (event.sponsorshipPrice * event.sponsors.length);
 
-    res.status(200).json({ 
-      event, 
-      attendees: event.registeredAttendees, 
-      revenue 
+    res.status(200).json({
+      event,
+      attendees: event.registeredAttendees,
+      revenue
     });
   } catch (error) {
     console.error('Command Center Error:', error);
@@ -241,7 +242,7 @@ router.post('/:eventId/broadcast', authMiddleware, async (req, res) => {
     const notifications = event.registeredAttendees.map(attendeeId => ({
       recipient: attendeeId,
       sender: req.user.userId,
-      type: 'System', 
+      type: 'System',
       message: `EVENT UPDATE ("${event.title}"): ${message}`,
       targetId: event._id
     }));
@@ -256,6 +257,40 @@ router.post('/:eventId/broadcast', authMiddleware, async (req, res) => {
     console.error('Broadcast Error:', error);
     res.status(500).json({ message: 'Server error transmitting broadcast.' });
   }
+});
+
+const { EventRegistration, EventSession, EventOutcome } = require('../models/CoreSchemas');
+
+// ROUTE A: Register Intent (Intent × Capability × Availability Input)
+router.post('/:eventId/register-intent', authMiddleware, async (req, res) => {
+  try {
+    const { attendingPurpose, specificLookingFor, weekendAvailabilityOnly, earlyStageFocus, geographicRegion } = req.body;
+    const existingReg = await EventRegistration.findOne({ event: req.params.eventId, user: req.user.userId });
+    if (existingReg) return res.status(400).json({ message: 'User already registered with intent for this event block.' });
+
+    const newReg = new EventRegistration({
+      event: req.params.eventId, user: req.user.userId,
+      attendingPurpose, specificLookingFor, weekendAvailabilityOnly, earlyStageFocus, geographicRegion
+    });
+    await newReg.save();
+
+    // Trigger background mission brief compilation instantly
+    compileMissionBrief(req.params.eventId, req.user.userId).catch(err =>
+      console.error("Background matchmaking execution failure:", err)
+    );
+
+    await EventOutcome.findOneAndUpdate({ event: req.params.eventId }, { $inc: { registrationsCount: 1 } }, { upsert: true });
+    res.status(201).json({ message: 'Intent profile registered successfully.', registration: newReg });
+  } catch (err) { res.status(500).json({ message: 'Server compilation error.' }); }
+});
+
+// ROUTE B: Fetch Operating System Agenda Components (Rooms, Lobby, People)
+router.get('/:eventId/operating-system', authMiddleware, async (req, res) => {
+  try {
+    const sessions = await EventSession.find({ event: req.params.eventId }).sort({ startTime: 1 });
+    const attendees = await EventRegistration.find({ event: req.params.eventId }).populate('user', 'name role headline skills');
+    res.status(200).json({ sessions, attendees });
+  } catch (err) { res.status(500).json({ message: 'Failed to stream operating system data.' }); }
 });
 
 module.exports = router;
