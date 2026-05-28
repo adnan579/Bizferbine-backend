@@ -313,24 +313,8 @@ const disputeSchema = new mongoose.Schema({
 // --- NEW: ANALYTICS EVENT SCHEMA (The Silent Tracker) ---
 const analyticsEventSchema = new mongoose.Schema({
   actor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Who did the action (null if anonymous)
-  targetUser: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }, // Who receives the dopamine
-  eventType: {
-    type: String,
-    enum: [
-      'PROFILE_VIEW',
-      'PORTFOLIO_CLICK',
-      'FOLLOW',
-      'MENTORSHIP_REQUEST',
-      'MENTORSHIP_ACCEPTED',
-      'REVIEW_RECEIVED',
-      'INSIGHT_VIEW',
-      'CASE_STUDY_VIEW',
-      'GITHUB_CLICK',
-      'WEBSITE_CLICK',
-      'LINKEDIN_CLICK'
-    ],
-    required: true
-  },
+  targetUser: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Who receives the dopamine
+  eventType: { type: String, required: true },
   metadata: { type: mongoose.Schema.Types.Mixed }, // Flexible object for extra data (e.g., { portfolioId: '...' })
   createdAt: { type: Date, default: Date.now, expires: '90d' } // Auto-delete raw events after 90 days to save DB space!
 });
