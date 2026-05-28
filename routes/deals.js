@@ -3,7 +3,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const multer = require('multer'); // Added for Document Sharing
 const { sendNotification } = require('../utils/notificationHelper');
-const { Deal } = require('../models/CoreSchemas');
+const { Deal, EconomicIndex } = require('../models/CoreSchemas');
 const authMiddleware = require('../middleware/authMiddleware');
 const governorMiddleware = require('../middleware/governorMiddleware');
 
@@ -124,6 +124,17 @@ router.put('/:dealId/status', authMiddleware, governorMiddleware, async (req, re
 
     deal.status = status;
     await deal.save();
+
+    // --- PHASE 5: MOAT LAYER (ECONOMIC INDEX TRACKING) ---
+    if (status === 'Accepted' || status === 'Closed') {
+      const newIndexLog = new EconomicIndex({
+        metricType: 'Deals Closed',
+        value: 1, // Base value unit
+        participants: [deal.initiator, ...deal.participants]
+      });
+      await newIndexLog.save().catch(err => console.error("Moat Tracking Error:", err));
+    }
+
     res.status(200).json({ message: `Deal status updated to ${status}!`, deal });
   } catch (error) {
     res.status(500).json({ message: 'Server error updating deal status.' });

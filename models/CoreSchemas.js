@@ -407,6 +407,21 @@ const EventSession = mongoose.model('EventSession', eventSessionSchema);
 const EventOutcome = mongoose.model('EventOutcome', eventOutcomeSchema);
 const EventReputation = mongoose.model('EventReputation', eventReputationSchema);
 
+// --- PHASE 4: INTELLIGENCE LAYER ---
+const eventIntelligenceSchema = new mongoose.Schema({
+  event: { type: mongoose.Schema.Types.ObjectId, ref: 'Event', required: true, unique: true, index: true },
+  topBuilders: [{
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    reason: String
+  }],
+  highRoiRooms: [{ type: String }],
+  missedOpportunities: [{ type: String }],
+  executiveSummary: { type: String },
+  vectorEmbeddings: { type: [Number] } // Prepared for Pinecone/pgvector syncing
+}, { timestamps: true });
+
+const EventIntelligence = mongoose.model('EventIntelligence', eventIntelligenceSchema);
+
 // --- SEQUENCE: MEMORY & RELATIONSHIP GRAPH (PHASE 3, 4, 5) ---
 
 // 1. Execution Intent (Replaces "Connect")
@@ -491,5 +506,5 @@ module.exports = {
   Dispute, MentorshipSession, MentorReview, AnalyticsEvent, AnalyticsSummary,
   EventRegistration, EventConnection, EventSession, EventOutcome, EventReputation,
   RelationshipEdge, ExecutionIntent, Workspace, WorkspaceMember, WorkspaceMilestone,
-  SponsorAction, UserMomentum, EconomicIndex
+  SponsorAction, UserMomentum, EconomicIndex, EventIntelligence
 };

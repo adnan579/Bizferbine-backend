@@ -1,8 +1,9 @@
 // routes/events.js
 const express = require('express');
-const { Event, User, Notification } = require('../models/CoreSchemas');
+const { Event, User, Notification, EventIntelligence } = require('../models/CoreSchemas');
 const authMiddleware = require('../middleware/authMiddleware'); // Our security guard
 const { matchmakingQueue } = require('../utils/queueEngine');
+const { compileEventIntelligence } = require('../utils/intelligenceEngine');
 
 const router = express.Router();
 
@@ -322,6 +323,55 @@ router.get('/:eventId/pulse', authMiddleware, async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ message: 'Error streaming ecosystem telemetry pulse.' });
+  }
+});
+
+// --- ROUTE D: EVENT STATE MACHINE CONTROLLER ---
+// URL: PUT /api/events/:eventId/state
+router.put('/:eventId/state', authMiddleware, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { targetState } = req.body;
+    const userId = req.user.userId;
+
+    // 1. Verify Ownership
+    const event = await Event.findById(eventId);
+    if (!event) return res.status(404).json({ message: 'Event not found.' });
+    if (event.organizerId.toString() !== userId) {
+      return res.status(403).json({ message: 'Only the Event Organizer can alter platform states.' });
+    }
+
+    // 2. Execute the secure Mongoose static transition
+    const updatedEvent = await Event.transitionState(eventId, targetState);
+
+    // PHASE 4: TRIGGER INTELLIGENCE COMPILATION ON END
+    if (targetState === 'Ended' || targetState === 'ENDED') {
+      // Fire and forget - don't block the API response
+      compileEventIntelligence(eventId).catch(err => console.error("AI Compilation Error:", err));
+    }
+
+    res.status(200).json({
+      message: `Event successfully transitioned to ${targetState}`,
+      event: updatedEvent
+    });
+  } catch (error) {
+    res.status(400).json({ message: error.message || 'State transition failed.' });
+  }
+});
+
+// --- ROUTE E: FETCH EVENT INTELLIGENCE (AI POST-MORTEM) ---
+// URL: GET /api/events/:eventId/intelligence
+router.get('/:eventId/intelligence', authMiddleware, async (req, res) => {
+  try {
+    const intelligence = await EventIntelligence.findOne({ event: req.params.eventId })
+      .populate('topBuilders.user', 'name profilePictureUrl role');
+
+    if (!intelligence) return res.status(404).json({ message: 'AI Intelligence compilation pending or unavailable.' });
+
+    res.status(200).json(intelligence);
+  } catch (error) {
+    console.error('Intelligence Fetch Error:', error);
+    res.status(500).json({ message: 'Server error retrieving AI artifact.' });
   }
 });
 

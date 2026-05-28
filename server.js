@@ -56,7 +56,7 @@ const io = new Server(server, {
 // Attach 'io' to the Express app so we can use it inside our routes
 app.set('io', io);
 
-// Listen for real-time connections
+// --- THE GLOBAL WEBSOCKET ENGINE (REAL-TIME LAYER) ---
 io.on('connection', (socket) => {
   console.log(`⚡ [Socket] Node Connected: ${socket.id}`);
 
@@ -70,6 +70,27 @@ io.on('connection', (socket) => {
   socket.on('join_workspace', (workspaceId) => {
     socket.join(`workspace_${workspaceId}`);
     console.log(`🤝 [Socket] Node joined workspace: workspace_${workspaceId}`);
+  });
+
+  // 1. Global Admin Broadcasts
+  socket.on('system_broadcast', (data) => {
+    io.emit('system_message', data);
+  });
+
+  // 2. PHASE 1: EVENT OS PRESENCE ROOMS
+  socket.on('join_event_os', ({ eventId, user }) => {
+    socket.join(`event_${eventId}`);
+    // Broadcast to everyone else in this specific event room that a new node joined
+    socket.to(`event_${eventId}`).emit('node_entered_os', {
+      message: `${user.name} has entered the active ecosystem.`,
+      user: user,
+      timestamp: new Date()
+    });
+    console.log(`[Event OS] User ${user.name} joined Event Vector ${eventId}`);
+  });
+
+  socket.on('leave_event_os', ({ eventId, user }) => {
+    socket.leave(`event_${eventId}`);
   });
 
   socket.on('disconnect', () => {
