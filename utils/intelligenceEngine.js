@@ -27,10 +27,21 @@ const compileEventIntelligence = async (eventId) => {
             systemInstruction: "You are an elite Startup Ecosystem Analyst. Analyze the raw event data JSON provided. Return your response STRICTLY as a JSON object with the following structure: { \"executiveSummary\": \"A 2-sentence summary of the event's execution velocity\", \"highRoiRooms\": [\"List of 2 trending topics or synergies\"], \"missedOpportunities\": [\"1-2 suggestions for connections that should have happened but didn't\"] }. Do not use markdown backticks."
         });
 
-        // 4. Generate AI Insights
+        // 4. Generate AI Insights with Resilient Parsing
         const result = await model.generateContent(JSON.stringify(payload));
-        const responseText = result.response.text().replace(/```json/gi, '').replace(/```/g, '').trim();
-        const aiData = JSON.parse(responseText);
+        let responseText = result.response.text();
+
+        // Sanitize markdown and extract pure JSON block
+        responseText = responseText.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+
+        let aiData;
+        try {
+            aiData = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
+        } catch (parseError) {
+            console.error('🚨 [Intelligence Engine] JSON Parse Failure. Falling back to safe defaults.', parseError);
+            aiData = { executiveSummary: "Data compilation yielded anomalous results.", highRoiRooms: [], missedOpportunities: [] };
+        }
 
         // 5. Store in the Intelligence Layer
         const newIntelligence = new EventIntelligence({

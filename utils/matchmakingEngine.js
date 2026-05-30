@@ -1,4 +1,4 @@
-const { EventRegistration, User, BarterWorkspace, Mentorship } = require('../models/CoreSchemas');
+const { EventRegistration, User, BarterWorkspace, Mentorship, UserMomentum, EventReputation, RelationshipEdge } = require('../models/CoreSchemas');
 
 const compileMissionBrief = async (eventId, targetUserId) => {
     try {
@@ -44,6 +44,43 @@ const compileMissionBrief = async (eventId, targetUserId) => {
             if (mutualWorkspaces > 0) {
                 score += 15;
                 matchReasons.push(`Strong historical alignment: Collaborated in ${mutualWorkspaces} legacy workspace(s)`);
+            }
+
+            // --- MATCHMAKING 2.0: MOMENTUM & REPUTATION WEIGHING ---
+            try {
+                // Fetch Momentum Data
+                const candidateMomentum = await UserMomentum.findOne({ user: candidate._id });
+                const targetMomentum = await UserMomentum.findOne({ user: targetUser._id });
+
+                if (candidateMomentum && targetMomentum) {
+                    // 1. Momentum Parity: Match fast executors with fast executors
+                    const momentumDiff = Math.abs(candidateMomentum.execution - targetMomentum.execution);
+                    if (momentumDiff <= 15) {
+                        score += 15;
+                        matchReasons.push("High execution velocity parity");
+                    }
+
+                    // 2. Track Record
+                    if (candidateMomentum.followThrough > 80) {
+                        score += 10;
+                        matchReasons.push("Verified high follow-through rate");
+                    }
+                }
+
+                // 3. Graph Memory (Have they met before?)
+                const historicalEdge = await RelationshipEdge.findOne({
+                    $or: [
+                        { sourceUser: targetUser._id, targetUser: candidate._id },
+                        { sourceUser: candidate._id, targetUser: targetUser._id }
+                    ]
+                });
+
+                if (historicalEdge) {
+                    score += (5 * historicalEdge.strength); // Compound scoring
+                    matchReasons.push(`Historical Synergy (${historicalEdge.type})`);
+                }
+            } catch (aiErr) {
+                console.error("Matchmaking Intelligence Non-Fatal Error:", aiErr);
             }
 
             return {

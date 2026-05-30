@@ -488,6 +488,12 @@ const economicIndexSchema = new mongoose.Schema({
   participants: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
 }, { timestamps: true });
 
+// --- GRAPH & MOAT INDEXES ---
+relationshipEdgeSchema.index({ sourceUser: 1, targetUser: 1 }, { unique: true });
+executionIntentSchema.index({ initiator: 1, target: 1, status: 1 });
+workspaceMemberSchema.index({ workspace: 1, user: 1 }, { unique: true });
+economicIndexSchema.index({ eventSource: 1, metricType: 1 });
+
 // Compile Models
 const ExecutionIntent = mongoose.model('ExecutionIntent', executionIntentSchema);
 const Workspace = mongoose.model('Workspace', workspaceSchema);

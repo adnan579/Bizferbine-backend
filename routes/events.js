@@ -260,7 +260,7 @@ router.post('/:eventId/broadcast', authMiddleware, async (req, res) => {
   }
 });
 
-const { EventRegistration, EventSession, EventOutcome } = require('../models/CoreSchemas');
+const { EventRegistration, EventSession, EventOutcome, SponsorAction } = require('../models/CoreSchemas');
 
 // ROUTE A: Register Intent (Intent × Capability × Availability Input)
 router.post('/:eventId/register-intent', authMiddleware, async (req, res) => {
@@ -372,6 +372,57 @@ router.get('/:eventId/intelligence', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Intelligence Fetch Error:', error);
     res.status(500).json({ message: 'Server error retrieving AI artifact.' });
+  }
+});
+
+// --- ROUTE F: ADD TIMELINE AGENDA SESSION (ORGANIZER ONLY) ---
+// URL: POST /api/events/:eventId/sessions
+router.post('/:eventId/sessions', authMiddleware, async (req, res) => {
+  try {
+    const { title, roomName, startTime, endTime, deliverables } = req.body;
+    const event = await Event.findById(req.params.eventId);
+
+    if (!event) return res.status(404).json({ message: 'Event not found.' });
+    if (event.organizerId.toString() !== req.user.userId) {
+      return res.status(403).json({ message: 'Only the organizer can modify the timeline.' });
+    }
+
+    const newSession = new EventSession({
+      event: req.params.eventId,
+      title, roomName, startTime, endTime,
+      deliverables: deliverables ? deliverables.split(',').map(d => d.trim()) : []
+    });
+
+    await newSession.save();
+    res.status(201).json({ message: 'Agenda track locked in.', session: newSession });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error compiling agenda session.' });
+  }
+});
+
+// --- ROUTE G: SPONSOR OPERATOR ACTION DEPLOYMENT ---
+// URL: POST /api/events/:eventId/sponsor-action
+router.post('/:eventId/sponsor-action', authMiddleware, async (req, res) => {
+  try {
+    const { capabilities, details } = req.body;
+    const event = await Event.findById(req.params.eventId);
+
+    if (!event) return res.status(404).json({ message: 'Event offline.' });
+    if (!event.sponsors.includes(req.user.userId)) {
+      return res.status(403).json({ message: 'Access Denied: Only verified sponsors can deploy actions.' });
+    }
+
+    const newAction = new SponsorAction({
+      event: req.params.eventId,
+      sponsor: req.user.userId,
+      capabilities,
+      details
+    });
+
+    await newAction.save();
+    res.status(201).json({ message: `${capabilities} successfully deployed to the event grid.`, action: newAction });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error deploying sponsor action.' });
   }
 });
 
