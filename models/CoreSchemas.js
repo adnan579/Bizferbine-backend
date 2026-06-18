@@ -8,8 +8,16 @@ const userSchema = new mongoose.Schema({
   username: { type: String, unique: true, sparse: true, trim: true },
   passwordHash: { type: String, required: true },
   industry: { type: String },
-  role: { type: String, enum: ['Entrepreneur', 'Mentor', 'Investor', 'Standard', 'Admin', 'SuperAdmin'], default: 'Standard' },
+  role: { type: String, enum: ['business_owner', 'entrepreneur', 'professional', 'mentor'], default: 'professional' },
   status: { type: String, enum: ['Active', 'Suspended'], default: 'Active' },
+  timezone: { type: String },
+  currency: { type: String, default: 'USD' },
+  legalCompliance: {
+    termsAccepted: { type: Boolean },
+    privacyAccepted: { type: Boolean },
+    consentTimestamp: { type: Date },
+    policyVersion: { type: String }
+  },
   // --- NEW: AUTHENTICATION & SECURITY FIELDS ---
   isVerified: { type: Boolean, default: false }, // Blocks login until true
   verificationToken: { type: String },           // The unique email link token

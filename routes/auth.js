@@ -10,10 +10,10 @@ const { OAuth2Client } = require('google-auth-library');
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-const loginLimiter = rateLimit({ 
-  windowMs: 15 * 60 * 1000, 
-  max: 5, 
-  message: { message: "Too many login attempts from this IP, please try again after 15 minutes." } 
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { message: "Too many login attempts from this IP, please try again after 15 minutes." }
 });
 
 const router = express.Router();
@@ -21,7 +21,11 @@ const router = express.Router();
 // --- ROUTE 1: REGISTER WITH VERIFICATION ---
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role, timezone, currency, termsAccepted, privacyAccepted, policyVersion } = req.body;
+
+    if (termsAccepted !== true || privacyAccepted !== true) {
+      return res.status(400).json({ message: 'You must explicitly accept the terms of service and privacy policy to register.' });
+    }
 
     const existingUser = await User.findOne({ email });
     if (existingUser) return res.status(400).json({ message: 'User already exists.' });
@@ -30,8 +34,8 @@ router.post('/register', async (req, res) => {
     const passwordHash = await bcrypt.hash(password, salt);
 
     // --- ADD THIS SAFETY NET ---
-    const validRoles = ['Entrepreneur', 'Mentor', 'Investor', 'Standard', 'Admin', 'SuperAdmin'];
-    const assignedRole = validRoles.includes(role) ? role : 'Standard';
+    const validRoles = ['business_owner', 'entrepreneur', 'professional', 'mentor'];
+    const assignedRole = validRoles.includes(role) ? role : 'professional';
 
     // Generate a secure random token for email verification (DECLARED ONLY ONCE NOW!)
     const verificationToken = crypto.randomBytes(32).toString('hex');
@@ -41,6 +45,14 @@ router.post('/register', async (req, res) => {
       email,
       passwordHash,
       role: assignedRole, // Uses our safety net!
+      timezone,
+      currency: currency || 'USD',
+      legalCompliance: {
+        termsAccepted,
+        privacyAccepted,
+        consentTimestamp: new Date(),
+        policyVersion: policyVersion || '1.0'
+      },
       isVerified: false,  // LOCK THE ACCOUNT
       verificationToken
     });
@@ -65,7 +77,7 @@ router.post('/register', async (req, res) => {
 router.get('/verify/:token', async (req, res) => {
   try {
     const user = await User.findOne({ verificationToken: req.params.token });
-    
+
     if (!user) return res.status(400).json({ message: 'Invalid or expired verification link.' });
 
     // Unlock the account!
@@ -119,7 +131,7 @@ router.post('/forgot-password', async (req, res) => {
   try {
     const { email } = req.body;
     const user = await User.findOne({ email });
-    
+
     if (!user) return res.status(404).json({ message: 'User not found.' });
 
     const token = crypto.randomBytes(20).toString('hex');
@@ -127,7 +139,7 @@ router.post('/forgot-password', async (req, res) => {
     user.resetPasswordExpires = Date.now() + 3600000; // 1 hour from now
 
     await user.save();
-    
+
     try {
       await sendPasswordResetEmail(user.email, user.name, token);
     } catch (emailErr) {
@@ -167,7 +179,7 @@ router.post('/reset-password/:token', async (req, res) => {
 router.post('/google', async (req, res) => {
   try {
     const { credential } = req.body;
-    
+
     // 1. Verify the Google Token
     const ticket = await googleClient.verifyIdToken({
       idToken: credential,
@@ -193,7 +205,7 @@ router.post('/google', async (req, res) => {
         name,
         email,
         passwordHash,
-        role: 'Standard',
+        role: 'professional',
         profilePictureUrl: picture,
         isVerified: true // Google already verified their identity
       });

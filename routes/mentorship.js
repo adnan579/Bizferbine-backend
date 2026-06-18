@@ -123,6 +123,9 @@ router.post('/match', authMiddleware, async (req, res) => {
     if (goals && goals.length > 0) {
       goals.forEach(goal => keywords.push(new RegExp(goal, 'i')));
     }
+    if (stage) keywords.push(new RegExp(stage, 'i'));
+    if (location) keywords.push(new RegExp(location, 'i'));
+    if (communication) keywords.push(new RegExp(communication, 'i'));
 
     const query = { _id: { $ne: req.user.userId } };
 
@@ -131,7 +134,8 @@ router.post('/match', authMiddleware, async (req, res) => {
         { industry: { $in: keywords } },
         { bio: { $in: keywords } },
         { headline: { $in: keywords } },
-        { skills: { $in: keywords } }
+        { skills: { $in: keywords } },
+        { location: { $in: keywords } }
       ];
     }
 
