@@ -4,7 +4,7 @@ const authMiddleware = require('../middleware/authMiddleware');
 
 // Initialize Stripe with a test secret key
 // (In production, this will be safely stored in an environment variable)
-const stripe = require('stripe')('sk_test_51DummyTestKeyDoNotUseInProduction123456789'); 
+const stripe = require('stripe')('sk_test_51DummyTestKeyDoNotUseInProduction123456789');
 
 const router = express.Router();
 
@@ -12,7 +12,7 @@ const router = express.Router();
 // URL: POST /api/payments/create-checkout-session
 router.post('/create-checkout-session', authMiddleware, async (req, res) => {
   try {
-    const { eventTitle, ticketPrice } = req.body;
+    const { eventTitle, ticketPrice, tier } = req.body;
 
     // Validate that we received the necessary data
     if (!eventTitle || !ticketPrice) {
@@ -27,26 +27,26 @@ router.post('/create-checkout-session', authMiddleware, async (req, res) => {
           price_data: {
             currency: 'usd', // You can change this to 'inr', 'eur', etc.
             product_data: {
-              name: eventTitle,
-              description: `Admission ticket for ${eventTitle}`
+              name: tier ? `${tier} Ticket: ${eventTitle}` : eventTitle,
+              description: tier ? `Admission ticket for ${eventTitle} (${tier} Tier)` : `Admission ticket for ${eventTitle}`
             },
             // CRUCIAL: Stripe calculates everything in the smallest currency unit (cents). 
             // So, $50.00 must be sent as 5000. We multiply by 100 here!
-            unit_amount: ticketPrice * 100, 
+            unit_amount: ticketPrice * 100,
           },
           quantity: 1, // Buying 1 ticket at a time
         },
       ],
       mode: 'payment',
       // These are dummy URLs for now. When you build the frontend, we will redirect the user here!
-      success_url: 'http://localhost:3000/payment-success', 
+      success_url: 'http://localhost:3000/payment-success',
       cancel_url: 'http://localhost:3000/payment-cancelled',
     });
 
     // Send the generated secure URL back to the user
-    res.status(200).json({ 
-      message: 'Checkout session created successfully!', 
-      checkoutUrl: session.url 
+    res.status(200).json({
+      message: 'Checkout session created successfully!',
+      checkoutUrl: session.url
     });
 
   } catch (error) {

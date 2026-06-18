@@ -19,7 +19,8 @@ const upload = multer({ storage: storage });
 // --- ROUTE 1: CREATE A NEW DEAL ROOM ---
 router.post('/', authMiddleware, async (req, res) => {
   try {
-    const { title, description, targetParticipantId } = req.body;
+    // Added 'type' and 'amount' parsing from the UI update
+    const { title, description, targetParticipantId, type } = req.body;
 
     // FIX: Strict Validation for the MongoDB User ID
     if (targetParticipantId && !mongoose.Types.ObjectId.isValid(targetParticipantId)) {
@@ -31,7 +32,8 @@ router.post('/', authMiddleware, async (req, res) => {
       description,
       initiator: req.user.userId,
       participants: targetParticipantId ? [targetParticipantId] : [],
-      documents: []
+      documents: [],
+      dealType: type || 'Partnership'
     });
 
     await newDeal.save();

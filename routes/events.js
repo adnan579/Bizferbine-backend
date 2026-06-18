@@ -14,8 +14,12 @@ router.post('/', authMiddleware, async (req, res) => {
     // 1. Extract all the advanced data from the request
     const {
       title, description, type, locationOrLink, date,
-      ticketPrice, maxCapacity, acceptsSponsors, sponsorshipPrice
+      ticketTiers, acceptsSponsors, sponsorshipPrice
     } = req.body;
+
+    // Extract backwards compatibility properties
+    const derivedPrice = ticketTiers && ticketTiers.length > 0 ? ticketTiers[0].price : 0;
+    const derivedCapacity = ticketTiers && ticketTiers.length > 0 ? ticketTiers.reduce((sum, t) => sum + (Number(t.capacity) || 0), 0) : 100;
 
     // 2. Create the event, pulling the organizer's ID straight from their secure token
     const newEvent = new Event({
@@ -25,8 +29,9 @@ router.post('/', authMiddleware, async (req, res) => {
       locationOrLink,
       date,
       organizerId: req.user.userId, // Assigned automatically!
-      ticketPrice: ticketPrice || 0,
-      maxCapacity,
+      ticketPrice: derivedPrice,
+      maxCapacity: derivedCapacity,
+      ticketTiers: ticketTiers || [], // Tiered ticketing array
       acceptsSponsors: acceptsSponsors || false,
       sponsorshipPrice: sponsorshipPrice || 0
     });
@@ -96,7 +101,7 @@ router.post('/:eventId/register', authMiddleware, async (req, res) => {
     // 1. Extract the Event ID from the URL and User ID from the secure token
     const eventId = req.params.eventId;
     const userId = req.user.userId;
-    const { paymentSuccess } = req.body; // Mocked Razorpay Payload
+    const { paymentSuccess, tierName } = req.body; // Mocked Razorpay Payload + Tier selection
 
     // 2. Find the requested event in the database
     const event = await Event.findById(eventId);
@@ -111,17 +116,18 @@ router.post('/:eventId/register', authMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'You are already registered for this event.' });
     }
 
-    // 4. Capacity Check: Is the event sold out?
+    // 4. Base Capacity Check: Is the event sold out? (Could be enhanced to check specific tier availability)
     if (event.registeredAttendees.length >= event.maxCapacity) {
       return res.status(400).json({ message: 'Sorry, this event is at full capacity.' });
     }
 
+    const activePrice = tierName && event.ticketTiers && event.ticketTiers.length > 0 ? event.ticketTiers.find(t => t.name === tierName)?.price : event.ticketPrice;
+
     // PHASE 1: Razorpay Integration Hook
-    if (event.ticketPrice > 0 && !paymentSuccess) {
-      // In production, this would initialize razorpay.orders.create() and return the orderId
+    if (activePrice > 0 && !paymentSuccess) {
       return res.status(200).json({
         requiresPayment: true,
-        amount: event.ticketPrice,
+        amount: activePrice,
         message: 'Redirecting to secure Razorpay checkout...'
       });
     }

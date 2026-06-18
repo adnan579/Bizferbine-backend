@@ -48,9 +48,9 @@ router.post('/request', authMiddleware, async (req, res) => {
 
     // --- SILENT ANALYTICS: Track the Request ---
     trackEvent({
-        actor: menteeId,
-        targetUser: mentorId,
-        eventType: 'MENTORSHIP_REQUEST'
+      actor: menteeId,
+      targetUser: mentorId,
+      eventType: 'MENTORSHIP_REQUEST'
     });
 
     res.status(201).json({ message: 'Mentorship request sent successfully!', request: newRequest });
@@ -98,17 +98,48 @@ router.put('/:requestId/status', authMiddleware, async (req, res) => {
 
     // --- SILENT ANALYTICS: Track the Acceptance ---
     if (status === 'Accepted') {
-        trackEvent({
-            actor: req.user.userId, // The mentor who accepted
-            targetUser: request.mentee, // The mentee who got accepted
-            eventType: 'MENTORSHIP_ACCEPTED'
-        });
+      trackEvent({
+        actor: req.user.userId, // The mentor who accepted
+        targetUser: request.mentee, // The mentee who got accepted
+        eventType: 'MENTORSHIP_ACCEPTED'
+      });
     }
 
     res.status(200).json({ message: `Mentorship request ${status}!`, request });
   } catch (error) {
     console.error('Update Mentorship Status Error:', error);
     res.status(500).json({ message: 'Server error updating status.' });
+  }
+});
+
+// --- ROUTE 4: ALGORITHMIC MATCHMAKING (QUIZ) ---
+// URL: POST /api/mentorship/match
+router.post('/match', authMiddleware, async (req, res) => {
+  try {
+    const { goals, industry, stage, location, communication } = req.body;
+
+    const keywords = [];
+    if (industry) keywords.push(new RegExp(industry, 'i'));
+    if (goals && goals.length > 0) {
+      goals.forEach(goal => keywords.push(new RegExp(goal, 'i')));
+    }
+
+    const query = { _id: { $ne: req.user.userId } };
+
+    if (keywords.length > 0) {
+      query.$or = [
+        { industry: { $in: keywords } },
+        { bio: { $in: keywords } },
+        { headline: { $in: keywords } },
+        { skills: { $in: keywords } }
+      ];
+    }
+
+    const matches = await User.find(query).limit(10).select('-password');
+    res.status(200).json({ matches: matches.length > 0 ? matches : await User.find({ _id: { $ne: req.user.userId } }).limit(4).select('-password') });
+  } catch (error) {
+    console.error('Matchmaking Error:', error);
+    res.status(500).json({ message: 'Server error during algorithmic match.' });
   }
 });
 
