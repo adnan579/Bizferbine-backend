@@ -1,30 +1,61 @@
 const mongoSanitize = require('express-mongo-sanitize');
-const xss = require('xss-clean');
+const xss = require('xss'); // Using the modern xss library we installed earlier
 
-// Initialize the middleware functions
-const sanitizeMongo = mongoSanitize();
-const sanitizeXss = xss();
+// Recursive function to safely clean all strings in a payload
+const sanitizeInput = (data) => {
+    if (typeof data === 'string') {
+        return xss.filterXSS(data);
+    }
+    if (Array.isArray(data)) {
+        return data.map(item => sanitizeInput(item));
+    }
+    if (data !== null && typeof data === 'object') {
+        const cleaned = {};
+        for (const key in data) {
+            cleaned[key] = sanitizeInput(data[key]);
+        }
+        return cleaned;
+    }
+    return data;
+};
 
 const sanitizationMiddleware = (req, res, next) => {
-    // 1. BYPASS WEBSOCKETS: If this is a Socket.io request, skip sanitization entirely
+    // 1. Bypass Socket.io handshakes entirely
     if (req.url && req.url.includes('/socket.io')) {
         return next();
     }
 
-    // 2. CRASH PREVENTION: Wrap in try/catch to stop the "IncomingMessage getter" TypeError
     try {
-        sanitizeMongo(req, res, (err) => {
-            if (err) return next(err);
+        // 2. Sanitize Body (Safe to reassign)
+        if (req.body && Object.keys(req.body).length > 0) {
+            const noSqlCleaned = mongoSanitize.sanitize(req.body, { replaceWith: '_' });
+            req.body = sanitizeInput(noSqlCleaned);
+        }
 
-            // Proceed to XSS clean if Mongo sanitize passes
-            sanitizeXss(req, res, next);
-        });
+        // 3. Sanitize Params (Safe to reassign)
+        if (req.params && Object.keys(req.params).length > 0) {
+            const noSqlCleaned = mongoSanitize.sanitize(req.params, { replaceWith: '_' });
+            req.params = sanitizeInput(noSqlCleaned);
+        }
+
+        // 4. Sanitize Query (CRITICAL FIX)
+        // We mutate the properties INSIDE the object rather than overwriting 
+        // the req.query object itself. This completely bypasses the Socket.io read-only crash.
+        if (req.query && Object.keys(req.query).length > 0) {
+            const noSqlCleaned = mongoSanitize.sanitize(req.query, { replaceWith: '_' });
+            const xssCleaned = sanitizeInput(noSqlCleaned);
+
+            for (const key in xssCleaned) {
+                req.query[key] = xssCleaned[key];
+            }
+        }
+
+        // Proceed to the actual route (e.g., /auth/login)
+        next();
     } catch (error) {
-        // If a read-only object slips through, log it safely instead of crashing the server
-        console.warn(`⚠️ [Sanitizer] Bypassed read-only object on route: ${req.url}`);
+        console.error(`[Sanitizer Error] Failed processing on ${req.url}:`, error);
         next();
     }
 };
 
-// Export as a single bulletproof function instead of an array
 module.exports = sanitizationMiddleware;
