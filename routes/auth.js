@@ -105,7 +105,6 @@ router.post('/login', loginLimiter, async (req, res) => {
     }
 
     // 2. THE EMAIL VERIFICATION LOCK
-    // (We bypass this lock for Admins so you don't lock yourself out of the Overseer portal!)
     if (!user.isVerified && user.role !== 'Admin' && user.role !== 'SuperAdmin') {
       return res.status(403).json({ message: 'UNVERIFIED NODE: Please check your email to verify your identity before logging in.' });
     }
@@ -119,7 +118,15 @@ router.post('/login', loginLimiter, async (req, res) => {
       { expiresIn: '7d' }
     );
 
-    res.cookie('bizzua_token', token, { httpOnly: true, secure: true, sameSite: 'none', maxAge: 7 * 24 * 60 * 60 * 1000 });
+    // FIX: Environment-Aware Cookie Issuance
+    const isProduction = process.env.NODE_ENV === 'production';
+    res.cookie('bizzua_token', token, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
+
     res.status(200).json({ user: { id: user._id, name: user.name, email: user.email, role: user.role, profilePictureUrl: user.profilePictureUrl } });
   } catch (error) {
     res.status(500).json({ message: 'Server error during login.' });
@@ -214,7 +221,16 @@ router.post('/google', async (req, res) => {
 
     // 4. Generate Session Token and Authenticate
     const token = jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET || 'your_super_secret_key', { expiresIn: '7d' });
-    res.cookie('bizzua_token', token, { httpOnly: true, secure: true, sameSite: 'none', maxAge: 7 * 24 * 60 * 60 * 1000 });
+
+    // FIX: Environment-Aware Cookie Issuance
+    const isProduction = process.env.NODE_ENV === 'production';
+    res.cookie('bizzua_token', token, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
+
     res.status(200).json({ user: { id: user._id, name: user.name, email: user.email, role: user.role, profilePictureUrl: user.profilePictureUrl } });
   } catch (error) {
     console.error('Google OAuth Error:', error);

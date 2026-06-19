@@ -3,7 +3,8 @@ const { User } = require('../models/CoreSchemas'); // We need to pull the User d
 
 const authMiddleware = async (req, res, next) => {
   try {
-    const token = req.cookies.token;
+    // FIX: Look for 'bizzua_token' first to align with the login issuance
+    const token = req.cookies.bizzua_token || req.cookies.token;
 
     if (!token) {
       return res.status(401).json({ message: 'Access Denied: No Token Provided.' });
@@ -18,7 +19,7 @@ const authMiddleware = async (req, res, next) => {
     if (!user) {
       return res.status(404).json({ message: 'User profile not found.' });
     }
-    
+
     if (user.status === 'Suspended') {
       return res.status(403).json({ message: 'ACCOUNT SUSPENDED: Your access to the platform has been revoked by Overseer Admins.' });
     }
