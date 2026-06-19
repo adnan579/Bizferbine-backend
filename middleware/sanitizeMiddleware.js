@@ -1,8 +1,7 @@
 const mongoSanitize = require('express-mongo-sanitize');
 
 // 1. NATIVE ZERO-DEPENDENCY XSS ESCAPER
-// This completely removes the need for 'xss' or 'xss-clean' NPM packages.
-// It safely converts malicious tags (like <script>) into harmless text strings.
+// No NPM packages required. This will never cause a MODULE_NOT_FOUND error.
 const escapeHTML = (str) => {
     if (typeof str !== 'string') return str;
     return str.replace(/[&<>'"]/g, tag => ({
@@ -52,8 +51,6 @@ const sanitizationMiddleware = (req, res, next) => {
         }
 
         // 5. Sanitize Query (CRITICAL FIX FOR LOGIN & SOCKETS)
-        // We mutate the properties INSIDE the object rather than overwriting 
-        // the req.query object itself. This bypasses the strict read-only lock.
         if (req.query && Object.keys(req.query).length > 0) {
             const noSqlCleaned = mongoSanitize.sanitize(req.query, { replaceWith: '_' });
             const xssCleaned = sanitizeInput(noSqlCleaned);
@@ -63,11 +60,10 @@ const sanitizationMiddleware = (req, res, next) => {
             }
         }
 
-        // Proceed to the actual route (e.g., /auth/login)
         next();
     } catch (error) {
         console.error(`[Sanitizer Error] Failed processing on ${req.url}:`, error);
-        next();
+        next(); // Ensures the server NEVER crashes, even if an error occurs
     }
 };
 
