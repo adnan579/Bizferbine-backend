@@ -430,6 +430,26 @@ const eventIntelligenceSchema = new mongoose.Schema({
 
 const EventIntelligence = mongoose.model('EventIntelligence', eventIntelligenceSchema);
 
+// --- NEW: IMMUTABLE SYSTEM AUDIT LOG ---
+const systemAuditLogSchema = new mongoose.Schema({
+  actor_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  action_type: { type: String, required: true, index: true },
+  target_id: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
+  ip_address: { type: String },
+  delta_changes: { type: mongoose.Schema.Types.Mixed }, // e.g., { before: any, after: any }
+  created_at: { type: Date, default: Date.now, immutable: true }
+});
+
+// --- IMMUTABILITY ENFORCEMENT ---
+// Prevent any updates or deletions to audit log documents
+const immutableError = new Error('SystemAuditLog records are immutable and cannot be changed or deleted.');
+systemAuditLogSchema.pre(['updateOne', 'findOneAndUpdate', 'remove', 'deleteOne', 'findOneAndDelete'], function (next) {
+  next(immutableError);
+});
+
+const SystemAuditLog = mongoose.model('SystemAuditLog', systemAuditLogSchema);
+
+
 // --- SEQUENCE: MEMORY & RELATIONSHIP GRAPH (PHASE 3, 4, 5) ---
 
 // 1. Execution Intent (Replaces "Connect")
@@ -518,7 +538,7 @@ module.exports = {
   User, Event, Deal, Mentorship, Connection, Message, Insight, MentorshipApplication,
   SkillExchange, Notification, BarterWorkspace, WellnessLog,
   Dispute, MentorshipSession, MentorReview, AnalyticsEvent, AnalyticsSummary,
-  EventRegistration, EventConnection, EventSession, EventOutcome, EventReputation,
+  EventRegistration, EventConnection, EventSession, EventOutcome, EventReputation, SystemAuditLog,
   RelationshipEdge, ExecutionIntent, Workspace, WorkspaceMember, WorkspaceMilestone,
   SponsorAction, UserMomentum, EconomicIndex, EventIntelligence
 };

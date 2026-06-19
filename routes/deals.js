@@ -3,18 +3,18 @@ const express = require('express');
 const mongoose = require('mongoose');
 const multer = require('multer'); // Added for Document Sharing
 const { sendNotification } = require('../utils/notificationHelper');
+const { createMagicNumberValidator } = require('../utils/fileValidator');
 const { Deal, EconomicIndex } = require('../models/CoreSchemas');
 const authMiddleware = require('../middleware/authMiddleware');
 const governorMiddleware = require('../middleware/governorMiddleware');
 
 const router = express.Router();
 
-// --- MULTER CONFIGURATION FOR SECURE DOCUMENTS ---
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) { cb(null, 'uploads/'); },
-  filename: function (req, file, cb) { cb(null, 'secure-deal-' + Date.now() + '-' + file.originalname); }
+// --- MULTER CONFIGURATION FOR SECURE DOCUMENTS (WITH MAGIC NUMBER VALIDATION) ---
+const upload = multer({
+  storage: multer.memoryStorage(), // Use memory storage to get the buffer for validation
+  fileFilter: createMagicNumberValidator(['application/pdf', 'image/png', 'image/jpeg'])
 });
-const upload = multer({ storage: storage });
 
 // --- ROUTE 1: CREATE A NEW DEAL ROOM ---
 router.post('/', authMiddleware, async (req, res) => {

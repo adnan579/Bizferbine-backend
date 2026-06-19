@@ -7,6 +7,7 @@ const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const { User, Insight, Event, BarterWorkspace, MentorshipSession, Deal, MentorReview, AnalyticsEvent, WellnessLog } = require('../models/CoreSchemas');
+const { createMagicNumberValidator } = require('../utils/fileValidator');
 const authMiddleware = require('../middleware/authMiddleware');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
@@ -28,40 +29,37 @@ const storage = new CloudinaryStorage({
   }
 });
 
-const upload = multer({ 
+const upload = multer({
   storage: storage,
   limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB Limit
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')) cb(null, true);
-    else cb(new Error('Only image and video files are permitted!'), false);
-  }
+  fileFilter: createMagicNumberValidator(['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/webm'])
 });
 
 // --- ROUTE 1: UPDATE IDENTITY & BRANDING ---
 router.put('/', authMiddleware, upload.fields([
-    { name: 'profilePicture', maxCount: 1 }, 
-    { name: 'profileBanner', maxCount: 1 },
-    { name: 'pitchVideo', maxCount: 1 }
+  { name: 'profilePicture', maxCount: 1 },
+  { name: 'profileBanner', maxCount: 1 },
+  { name: 'pitchVideo', maxCount: 1 }
 ]), async (req, res) => {
   try {
     const { name, username, headline, industry, bio, location, linkedIn, github, website, skills, activeDirectiveIntent, activeDirectiveText } = req.body;
-    
+
     const user = await User.findById(req.user.userId);
     if (!user) return res.status(404).json({ message: 'User not found.' });
 
     if (name) user.name = name;
     if (headline) user.headline = headline;
-    if (industry) user.industry = industry; 
+    if (industry) user.industry = industry;
     if (bio) user.bio = bio;
     if (location) user.location = location;
 
     if (username && username !== user.username) {
-        const formattedUsername = username.toLowerCase().replace(/\s+/g, '');
-        const existingUser = await User.findOne({ username: formattedUsername });
-        if (existingUser) return res.status(400).json({ message: `The username @${formattedUsername} is already taken.` });
-        user.username = formattedUsername;
+      const formattedUsername = username.toLowerCase().replace(/\s+/g, '');
+      const existingUser = await User.findOne({ username: formattedUsername });
+      if (existingUser) return res.status(400).json({ message: `The username @${formattedUsername} is already taken.` });
+      user.username = formattedUsername;
     }
-    
+
     if (skills) user.skills = skills.split(',').map(skill => skill.trim());
 
     if (activeDirectiveIntent || activeDirectiveText) {
@@ -76,14 +74,14 @@ router.put('/', authMiddleware, upload.fields([
     if (website !== undefined) user.socialLinks.website = website;
 
     if (req.files) {
-        // req.files.path now contains the secure Cloudinary URL!
-        if (req.files['profilePicture']) user.profilePictureUrl = req.files['profilePicture'][0].path;
-        if (req.files['profileBanner']) user.profileBannerUrl = req.files['profileBanner'][0].path;
-        if (req.files['pitchVideo']) user.pitchVideoUrl = req.files['pitchVideo'][0].path; // Save video URL
+      // req.files.path now contains the secure Cloudinary URL!
+      if (req.files['profilePicture']) user.profilePictureUrl = req.files['profilePicture'][0].path;
+      if (req.files['profileBanner']) user.profileBannerUrl = req.files['profileBanner'][0].path;
+      if (req.files['pitchVideo']) user.pitchVideoUrl = req.files['pitchVideo'][0].path; // Save video URL
     }
 
     await user.save();
-    user.passwordHash = undefined; 
+    user.passwordHash = undefined;
     res.status(200).json({ message: 'Identity updated!', profile: user });
   } catch (error) {
     res.status(500).json({ message: 'Server error updating profile. ' + error.message });
@@ -94,9 +92,9 @@ router.put('/', authMiddleware, upload.fields([
 router.post('/portfolio', authMiddleware, upload.single('projectImage'), async (req, res) => {
   try {
     const { title, challenge, solution, result, projectUrl, githubUrl, stack } = req.body;
-    
+
     if (!title || !solution) {
-        return res.status(400).json({ message: 'Portfolio case studies require at least a title and solution.' });
+      return res.status(400).json({ message: 'Portfolio case studies require at least a title and solution.' });
     }
 
     const user = await User.findById(req.user.userId);
@@ -117,31 +115,31 @@ router.post('/portfolio', authMiddleware, upload.single('projectImage'), async (
 
 // --- ROUTE 3: LEAVE A TESTIMONIAL ---
 router.post('/:userId/testimonial', authMiddleware, async (req, res) => {
-    try {
-      const targetUserId = req.params.userId;
-      const senderId = req.user.userId;
-      const { text } = req.body;
-  
-      if (targetUserId === senderId) return res.status(400).json({ message: 'You cannot review yourself.' });
-  
-      const user = await User.findById(targetUserId);
-      if (!user) return res.status(404).json({ message: 'User not found.' });
-  
-      user.testimonials.push({ author: senderId, text: text });
-      await user.save();
-      
-      await sendNotification({
-        recipient: targetUserId, sender: senderId, type: 'Testimonial',
-        message: `Someone just left a new professional endorsement on your profile!`, targetId: user._id
-      });
+  try {
+    const targetUserId = req.params.userId;
+    const senderId = req.user.userId;
+    const { text } = req.body;
 
-      // --- SILENT ANALYTICS ---
-      trackEvent({ actor: senderId, targetUser: targetUserId, eventType: 'REVIEW_RECEIVED' });
+    if (targetUserId === senderId) return res.status(400).json({ message: 'You cannot review yourself.' });
 
-      res.status(201).json({ message: 'Endorsement added!', testimonials: user.testimonials });
-    } catch (error) {
-      res.status(500).json({ message: 'Server error adding endorsement.' });
-    }
+    const user = await User.findById(targetUserId);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    user.testimonials.push({ author: senderId, text: text });
+    await user.save();
+
+    await sendNotification({
+      recipient: targetUserId, sender: senderId, type: 'Testimonial',
+      message: `Someone just left a new professional endorsement on your profile!`, targetId: user._id
+    });
+
+    // --- SILENT ANALYTICS ---
+    trackEvent({ actor: senderId, targetUser: targetUserId, eventType: 'REVIEW_RECEIVED' });
+
+    res.status(201).json({ message: 'Endorsement added!', testimonials: user.testimonials });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error adding endorsement.' });
+  }
 });
 
 // --- ROUTE 4: LEAVE A TRADE REVIEW (RESTORED!) ---
@@ -191,8 +189,8 @@ router.get('/:userId', authMiddleware, async (req, res) => {
     const targetUserId = req.params.userId;
 
     const userProfile = await User.findById(targetUserId)
-        .select('-passwordHash')
-        .populate('testimonials.author barterReviews.reviewer', 'name role profilePictureUrl username');
+      .select('-passwordHash')
+      .populate('testimonials.author barterReviews.reviewer', 'name role profilePictureUrl username');
 
     if (!userProfile) return res.status(404).json({ message: 'Profile not found.' });
 
@@ -269,32 +267,32 @@ router.get('/:userId', authMiddleware, async (req, res) => {
     // PHASE 3: Mutual Trust Graph
     let mutualConnections = [];
     if (req.user.userId !== targetUserId) {
-        const currentUser = await User.findById(req.user.userId).select('following');
-        if (currentUser && currentUser.following && userProfile.followers) {
-            const mutualIds = currentUser.following.filter(id => userProfile.followers.includes(id));
-            mutualConnections = await User.find({ _id: { $in: mutualIds } }).select('name profilePictureUrl username').limit(5);
-        }
+      const currentUser = await User.findById(req.user.userId).select('following');
+      if (currentUser && currentUser.following && userProfile.followers) {
+        const mutualIds = currentUser.following.filter(id => userProfile.followers.includes(id));
+        mutualConnections = await User.find({ _id: { $in: mutualIds } }).select('name profilePictureUrl username').limit(5);
+      }
     }
 
     // --- TASK 2: ESCROW TVL ---
     const activeDeals = await Deal.find({
-        status: 'Negotiating',
-        $or: [{ initiator: targetUserId }, { participants: targetUserId }]
+      status: 'Negotiating',
+      $or: [{ initiator: targetUserId }, { participants: targetUserId }]
     });
-    
+
     let dealEscrow = 0;
     activeDeals.forEach(deal => {
-        if (deal.proposals && deal.proposals.length > 0) {
-            const latestAmount = deal.proposals[deal.proposals.length - 1].amount || 0;
-            dealEscrow += latestAmount;
-        }
+      if (deal.proposals && deal.proposals.length > 0) {
+        const latestAmount = deal.proposals[deal.proposals.length - 1].amount || 0;
+        dealEscrow += latestAmount;
+      }
     });
-    
+
     let eventEscrow = 0;
     if (userEvents && userEvents.length > 0) {
-        userEvents.forEach(e => {
-            eventEscrow += (e.sponsorshipPrice || 0) * (e.sponsors?.length || 0);
-        });
+      userEvents.forEach(e => {
+        eventEscrow += (e.sponsorshipPrice || 0) * (e.sponsors?.length || 0);
+      });
     }
     const escrowTVL = dealEscrow + eventEscrow;
 
@@ -302,40 +300,40 @@ router.get('/:userId', authMiddleware, async (req, res) => {
     const fourteenDaysAgo = new Date();
     fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
     const wellnessLogs = await WellnessLog.find({ user: targetUserId, createdAt: { $gte: fourteenDaysAgo } });
-    
+
     let positiveCount = 0;
     let negativeCount = 0;
     wellnessLogs.forEach(log => {
-        if (['Excellent', 'Good'].includes(log.mood)) positiveCount++;
-        else if (['Stressed', 'Overwhelmed'].includes(log.mood)) negativeCount++;
+      if (['Excellent', 'Good'].includes(log.mood)) positiveCount++;
+      else if (['Stressed', 'Overwhelmed'].includes(log.mood)) negativeCount++;
     });
 
     let staminaStatus = 'Stable';
     if (wellnessLogs.length > 0) {
-        if (positiveCount > wellnessLogs.length / 2) staminaStatus = 'Peak';
-        else if (negativeCount > wellnessLogs.length / 2) staminaStatus = 'Burnout';
+      if (positiveCount > wellnessLogs.length / 2) staminaStatus = 'Peak';
+      else if (negativeCount > wellnessLogs.length / 2) staminaStatus = 'Burnout';
     }
 
     // Cap score at 99 for realism
     repScore = Math.min(Math.max(Math.floor(repScore), 10), 99);
 
     // --- TASK 4: JSON RESPONSE PAYLOAD ---
-    res.status(200).json({ 
-        profile: userProfile,
-        thoughtLeadershipFeed: recentInsights,
-        reputation: {
-          score: repScore,
-          badges: [...new Set([...(userProfile.trustBadges || []), ...autoBadges])] 
-        },
-        networkPulse: {
-            followersCount: userProfile.followers?.length || 0,
-            followingCount: userProfile.following?.length || 0
-        },
-        verifiedExecution,
-        verifiedSkills, // Add verified skills to the payload
-        mutualConnections,
-        escrowTVL,
-        staminaStatus
+    res.status(200).json({
+      profile: userProfile,
+      thoughtLeadershipFeed: recentInsights,
+      reputation: {
+        score: repScore,
+        badges: [...new Set([...(userProfile.trustBadges || []), ...autoBadges])]
+      },
+      networkPulse: {
+        followersCount: userProfile.followers?.length || 0,
+        followingCount: userProfile.following?.length || 0
+      },
+      verifiedExecution,
+      verifiedSkills, // Add verified skills to the payload
+      mutualConnections,
+      escrowTVL,
+      staminaStatus
     });
   } catch (error) {
     console.error('Fetch Profile Error:', error);

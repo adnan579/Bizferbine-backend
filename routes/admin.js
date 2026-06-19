@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 // FIXED: All schemas are now properly imported!
 const { User, Dispute, Deal, SkillExchange, BarterWorkspace, MentorshipSession, MentorshipApplication, Insight, Event, Connection, Notification } = require('../models/CoreSchemas');
 const authMiddleware = require('../middleware/authMiddleware');
+const { logAudit } = require('../utils/auditLogger');
 
 const router = express.Router();
 
@@ -18,7 +19,7 @@ router.post('/init-overseer', async (req, res) => {
 
     // 2. Check if the account is stuck in the database
     let adminUser = await User.findOne({ email: 'admin@bizferbine.com' });
-    
+
     if (adminUser) {
       // IF STUCK: Force reset the password and role! No MongoDB deletion required.
       adminUser.passwordHash = passwordHash;
@@ -59,8 +60,14 @@ const verifyAdmin = async (req, res, next) => {
   }
 };
 
+// --- APPLY MIDDLEWARE TO ALL ADMIN ROUTES ---
+// This ensures every route defined below this point requires a user to be
+// logged in (authMiddleware) and have admin privileges (verifyAdmin).
+router.use(authMiddleware);
+router.use(verifyAdmin);
+
 // --- ROUTE 1: GET DASHBOARD KPI STATS ---
-router.get('/stats', authMiddleware, verifyAdmin, async (req, res) => {
+router.get('/stats', async (req, res) => {
   try {
     const totalUsers = await User.countDocuments();
     const activeDeals = await Deal.countDocuments({ status: 'Active' });
@@ -74,7 +81,7 @@ router.get('/stats', authMiddleware, verifyAdmin, async (req, res) => {
 });
 
 // --- ROUTE 2: GET DISPUTES ---
-router.get('/disputes', authMiddleware, verifyAdmin, async (req, res) => {
+router.get('/disputes', async (req, res) => {
   try {
     const disputes = await Dispute.find()
       .populate('reporter', 'name email profilePictureUrl')
@@ -86,18 +93,18 @@ router.get('/disputes', authMiddleware, verifyAdmin, async (req, res) => {
 });
 
 // --- ROUTE 3: UPDATE DISPUTE STATUS & ADD NOTE ---
-router.put('/disputes/:id', authMiddleware, verifyAdmin, async (req, res) => {
+router.put('/disputes/:id', async (req, res) => {
   try {
     const { status, note } = req.body;
     const dispute = await Dispute.findById(req.params.id);
-    
+
     if (!dispute) return res.status(404).json({ message: 'Dispute not found.' });
 
     if (status) dispute.status = status;
     if (note) {
       dispute.adminNotes.push({ adminId: req.user.userId, note });
     }
-    
+
     dispute.updatedAt = Date.now();
     await dispute.save();
 
@@ -108,7 +115,7 @@ router.put('/disputes/:id', authMiddleware, verifyAdmin, async (req, res) => {
 });
 
 // --- ROUTE 4: GET ALL USERS FOR MODERATION ---
-router.get('/users', authMiddleware, verifyAdmin, async (req, res) => {
+router.get('/users', async (req, res) => {
   try {
     const users = await User.find()
       .select('-passwordHash') // Hide passwords!
@@ -120,7 +127,7 @@ router.get('/users', authMiddleware, verifyAdmin, async (req, res) => {
 });
 
 // --- ROUTE 5: TOGGLE USER SUSPENSION ---
-router.put('/users/:id/suspend', authMiddleware, verifyAdmin, async (req, res) => {
+router.put('/users/:id/suspend', async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found.' });
@@ -129,8 +136,17 @@ router.put('/users/:id/suspend', authMiddleware, verifyAdmin, async (req, res) =
       return res.status(400).json({ message: 'You cannot suspend yourself.' });
     }
 
+    const statusBefore = user.status;
     user.status = user.status === 'Suspended' ? 'Active' : 'Suspended';
+    const statusAfter = user.status;
+
     await user.save();
+
+    // --- AUDIT LOGGING ---
+    await logAudit(req.user.userId, 'USER_STATUS_CHANGED', user._id, req.ip, {
+      before: statusBefore,
+      after: statusAfter,
+    });
 
     res.status(200).json({ message: `User account is now ${user.status}.`, user });
   } catch (error) {
@@ -139,7 +155,7 @@ router.put('/users/:id/suspend', authMiddleware, verifyAdmin, async (req, res) =
 });
 
 // --- ROUTE 6: DEEP ANALYTICS ---
-router.get('/analytics', authMiddleware, verifyAdmin, async (req, res) => {
+router.get('/analytics', async (req, res) => {
   try {
     const totalMentorships = await MentorshipApplication.countDocuments();
     const totalInsights = await Insight.countDocuments();
@@ -150,8 +166,8 @@ router.get('/analytics', authMiddleware, verifyAdmin, async (req, res) => {
     const events = await Event.find();
     let economyVolume = 0;
     events.forEach(e => {
-       economyVolume += (e.ticketPrice || 0) * (e.registeredAttendees?.length || 0);
-       economyVolume += (e.sponsorshipPrice || 0) * (e.sponsors?.length || 0);
+      economyVolume += (e.ticketPrice || 0) * (e.registeredAttendees?.length || 0);
+      economyVolume += (e.sponsorshipPrice || 0) * (e.sponsors?.length || 0);
     });
 
     res.status(200).json({ totalMentorships, totalInsights, totalEvents, totalConnections, economyVolume });
@@ -161,10 +177,10 @@ router.get('/analytics', authMiddleware, verifyAdmin, async (req, res) => {
 });
 
 // --- ROUTE 7: GET WORKSPACE CHAT LOGS FOR DISPUTES ---
-router.get('/workspaces/:id/logs', authMiddleware, verifyAdmin, async (req, res) => {
+router.get('/workspaces/:id/logs', async (req, res) => {
   try {
     const { module } = req.query;
-    
+
     // Phase 1: Security & Dispute Expansion
     if (module === 'DealRoom') {
       const deal = await Deal.findById(req.params.id).populate('proposals.senderId', 'name profilePictureUrl role');
@@ -188,7 +204,7 @@ router.get('/workspaces/:id/logs', authMiddleware, verifyAdmin, async (req, res)
 });
 
 // --- ROUTE 8: GLOBAL SYSTEM BROADCAST ---
-router.post('/broadcast', authMiddleware, verifyAdmin, async (req, res) => {
+router.post('/broadcast', async (req, res) => {
   try {
     const { message } = req.body;
     if (!message || message.trim() === '') {
@@ -221,12 +237,12 @@ router.post('/broadcast', authMiddleware, verifyAdmin, async (req, res) => {
 });
 
 // --- ROUTE 9: FETCH ALL MODERATABLE CONTENT ---
-router.get('/content', authMiddleware, verifyAdmin, async (req, res) => {
+router.get('/content', async (req, res) => {
   try {
     // Fetch latest 50 insights and upcoming events
     const insights = await Insight.find().populate('author', 'name email').sort({ createdAt: -1 }).limit(50);
     const events = await Event.find().populate('organizerId', 'name email').sort({ date: 1 }).limit(50);
-    
+
     res.status(200).json({ insights, events });
   } catch (error) {
     res.status(500).json({ message: 'Error fetching platform content.' });
@@ -234,7 +250,7 @@ router.get('/content', authMiddleware, verifyAdmin, async (req, res) => {
 });
 
 // --- ROUTE 10: DELETE AN INSIGHT ---
-router.delete('/content/insights/:id', authMiddleware, verifyAdmin, async (req, res) => {
+router.delete('/content/insights/:id', async (req, res) => {
   try {
     await Insight.findByIdAndDelete(req.params.id);
     res.status(200).json({ message: 'Insight permanently purged from the ecosystem.' });
@@ -244,7 +260,7 @@ router.delete('/content/insights/:id', authMiddleware, verifyAdmin, async (req, 
 });
 
 // --- ROUTE 11: DELETE AN EVENT ---
-router.delete('/content/events/:id', authMiddleware, verifyAdmin, async (req, res) => {
+router.delete('/content/events/:id', async (req, res) => {
   try {
     await Event.findByIdAndDelete(req.params.id);
     res.status(200).json({ message: 'Event cancelled and removed.' });
@@ -254,7 +270,7 @@ router.delete('/content/events/:id', authMiddleware, verifyAdmin, async (req, re
 });
 
 // --- ROUTE 12: ISSUE OFFICIAL WARNING TO A USER ---
-router.post('/users/:id/warn', authMiddleware, verifyAdmin, async (req, res) => {
+router.post('/users/:id/warn', async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found.' });
@@ -266,7 +282,7 @@ router.post('/users/:id/warn', authMiddleware, verifyAdmin, async (req, res) => 
       type: 'System',
       message: `OFFICIAL WARNING: Your recent activity has been flagged by Overseer Admins for violating network guidelines. Further infractions will result in an immediate hardware ban.`
     });
-    
+
     await alert.save();
     res.status(200).json({ message: `Warning successfully transmitted to ${user.name}.` });
   } catch (error) {
@@ -275,7 +291,7 @@ router.post('/users/:id/warn', authMiddleware, verifyAdmin, async (req, res) => 
 });
 
 // --- ROUTE 13: THE VAULT QUARANTINE COMMAND ---
-router.post('/deals/:id/freeze', authMiddleware, verifyAdmin, async (req, res) => {
+router.post('/deals/:id/freeze', async (req, res) => {
   try {
     const dealId = req.params.id;
     const deal = await Deal.findById(dealId);
@@ -295,12 +311,12 @@ router.post('/deals/:id/freeze', authMiddleware, verifyAdmin, async (req, res) =
 });
 
 // --- ROUTE 14: THE TRUST ORACLE (MANUAL BADGE INJECTION) ---
-router.post('/users/:id/badges', authMiddleware, verifyAdmin, async (req, res) => {
+router.post('/users/:id/badges', async (req, res) => {
   try {
     const { badge } = req.body;
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found.' });
-    
+
     if (!user.trustBadges.includes(badge)) {
       user.trustBadges.push(badge);
       await user.save();
@@ -312,11 +328,11 @@ router.post('/users/:id/badges', authMiddleware, verifyAdmin, async (req, res) =
 });
 
 // --- ROUTE 15: NEURAL OVERRIDE (GHOST LOGIN) ---
-router.post('/ghost-auth/:userId', authMiddleware, verifyAdmin, async (req, res) => {
+router.post('/ghost-auth/:userId', async (req, res) => {
   try {
     const targetUser = await User.findById(req.params.userId);
     if (!targetUser) return res.status(404).json({ message: 'Target node not found.' });
-    
+
     const token = jwt.sign({ userId: targetUser._id }, process.env.JWT_SECRET || 'fallback_secret', { expiresIn: '15m' });
     res.cookie('token', token, { httpOnly: true, secure: true, sameSite: 'none', maxAge: 15 * 60 * 1000 });
     res.status(200).json({ user: { id: targetUser._id, name: targetUser.name, role: targetUser.role, email: targetUser.email, username: targetUser.username } });

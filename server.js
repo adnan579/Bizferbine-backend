@@ -13,6 +13,7 @@ const { Server } = require('socket.io');
 const dns = require('dns');
 dns.setServers(['8.8.8.8', '8.8.4.4']);
 // ----------------------
+const sanitizationMiddleware = require('./middleware/sanitizeMiddleware');
 
 // 1. IMPORT ALL ROUTES CLEANLY
 const authRoutes = require('./routes/auth');
@@ -106,6 +107,9 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(cookieParser());
+
+// --- NEW: APPLY GLOBAL INPUT SANITIZATION ---
+app.use(sanitizationMiddleware);
 
 // Securely Serve the Uploads folder
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

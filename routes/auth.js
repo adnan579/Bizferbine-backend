@@ -119,7 +119,7 @@ router.post('/login', loginLimiter, async (req, res) => {
       { expiresIn: '7d' }
     );
 
-    res.cookie('token', token, { httpOnly: true, secure: true, sameSite: 'none', maxAge: 7 * 24 * 60 * 60 * 1000 });
+    res.cookie('bizzua_token', token, { httpOnly: true, secure: true, sameSite: 'none', maxAge: 7 * 24 * 60 * 60 * 1000 });
     res.status(200).json({ user: { id: user._id, name: user.name, email: user.email, role: user.role, profilePictureUrl: user.profilePictureUrl } });
   } catch (error) {
     res.status(500).json({ message: 'Server error during login.' });
@@ -214,7 +214,7 @@ router.post('/google', async (req, res) => {
 
     // 4. Generate Session Token and Authenticate
     const token = jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET || 'your_super_secret_key', { expiresIn: '7d' });
-    res.cookie('token', token, { httpOnly: true, secure: true, sameSite: 'none', maxAge: 7 * 24 * 60 * 60 * 1000 });
+    res.cookie('bizzua_token', token, { httpOnly: true, secure: true, sameSite: 'none', maxAge: 7 * 24 * 60 * 60 * 1000 });
     res.status(200).json({ user: { id: user._id, name: user.name, email: user.email, role: user.role, profilePictureUrl: user.profilePictureUrl } });
   } catch (error) {
     console.error('Google OAuth Error:', error);
@@ -224,7 +224,7 @@ router.post('/google', async (req, res) => {
 
 // --- ROUTE 7: SECURE LOGOUT ---
 router.post('/logout', (req, res) => {
-  res.clearCookie('token');
+  res.clearCookie('bizzua_token');
   res.status(200).json({ message: 'Node disconnected successfully.' });
 });
 
