@@ -59,7 +59,7 @@ app.set('io', io);
 
 // --- THE GLOBAL WEBSOCKET ENGINE (REAL-TIME LAYER) ---
 io.on('connection', (socket) => {
-  console.log(`⚡ [Socket] Node Connected: ${socket.id}`);
+  console.log(`🔌 [Socket] Node Connected: ${socket.id}`);
 
   // When a user logs in, put them in their own private secure room
   socket.on('join_user_room', (userId) => {
@@ -108,8 +108,8 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
-// --- NEW: APPLY GLOBAL INPUT SANITIZATION ---
-app.use(sanitizationMiddleware);
+// Security Sanitization Layers - Scoped strictly to API routes to prevent Socket.io crashes
+app.use('/api', sanitizationMiddleware);
 
 // Securely Serve the Uploads folder
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

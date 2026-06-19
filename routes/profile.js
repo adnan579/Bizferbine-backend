@@ -392,8 +392,21 @@ router.post('/:userId/synthetic-chat', authMiddleware, async (req, res) => {
     const result = await model.generateContent(fullPrompt);
     res.status(200).json({ reply: result.response.text() });
   } catch (error) {
-    console.error('Synthetic Node Error:', error);
-    res.status(500).json({ message: 'Synthetic Node encountered an error processing your request.' });
+    console.error("Gemini Intelligence Engine Error:", error);
+
+    // Check if it's a 503 Overload
+    if (error.status === 503) {
+      return res.status(503).json({
+        success: false,
+        message: "The AI Intelligence Engine is temporarily overloaded. Please try again in a few moments."
+      });
+    }
+
+    // Generic fallback
+    return res.status(500).json({
+      success: false,
+      message: "Failed to generate AI content."
+    });
   }
 });
 
